@@ -3,160 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR 3D Modeler - Photo Support</title>
+    <title>3D Text AR Modeler - Solo Focus Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #1a1a1a; color: white; }
+        body { margin: 0; overflow: hidden; font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #020617; color: #f8fafc; }
         canvas { display: block; }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
         .ui-panel {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            background: rgba(30, 30, 30, 0.85);
-            backdrop-filter: blur(10px);
+            top: 16px;
+            left: 16px;
+            z-index: 20;
             padding: 20px;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            width: 280px;
-            transition: opacity 0.3s;
-            max-height: 90vh;
+            border-radius: 24px;
+            width: 320px;
+            max-height: calc(100vh - 32px);
             overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-        .control-group { margin-bottom: 15px; }
-        .btn-tool {
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .btn-tool:hover { transform: translateY(-2px); filter: brightness(1.2); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4); }
+        
         #ar-button {
             position: absolute;
-            bottom: 30px;
+            bottom: 32px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 100;
-            padding: 16px 32px;
-            background: #3b82f6;
-            color: #fff;
+            z-index: 50;
+            padding: 16px 40px;
+            background: #ffffff;
+            color: #000;
             border-radius: 9999px;
-            font-weight: bold;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.5);
+            font-weight: 800;
             display: none;
             border: none;
             cursor: pointer;
+            box-shadow: 0 10px 30px rgba(255,255,255,0.2);
         }
-        #ar-instructions {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 20px;
-            display: none;
+        input, select { background: #1e293b; color: white; border: 1px solid #334155; border-radius: 12px; padding: 10px; width: 100%; outline: none; font-size: 14px; }
+        input:focus { border-color: #6366f1; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             z-index: 100;
-            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div id="ui-container" class="ui-panel">
-        <h1 class="text-xl font-bold mb-4 border-b border-gray-700 pb-2">AR 3D モデラー</h1>
-        
-        <div class="control-group">
-            <p class="text-xs uppercase text-gray-400 mb-2 font-semibold">オブジェクト追加</p>
-            <div class="grid grid-cols-2 gap-2">
-                <button onclick="addObject('box')" class="btn-tool bg-gray-700 p-2 rounded text-sm">📦 立方体</button>
-                <button onclick="addObject('sphere')" class="btn-tool bg-gray-700 p-2 rounded text-sm">🔮 球体</button>
-                <button onclick="addObject('cylinder')" class="btn-tool bg-gray-700 p-2 rounded text-sm">🔋 円柱</button>
-                <button onclick="addObject('torus')" class="btn-tool bg-gray-700 p-2 rounded text-sm">🍩 ドーナツ</button>
-            </div>
-            
-            <div class="mt-3">
-                <p class="text-xs uppercase text-gray-400 mb-2 font-semibold">写真を取り込む</p>
-                <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
-                <button onclick="document.getElementById('photoInput').click()" class="w-full btn-tool bg-blue-600 hover:bg-blue-500 p-2 rounded text-sm font-bold">
-                    📷 写真を追加
-                </button>
-            </div>
-        </div>
-
-        <div id="edit-panel" class="hidden border-t border-gray-700 pt-4 mt-4">
-            <p class="text-xs uppercase text-gray-400 mb-2 font-semibold">選択中の編集</p>
-            <div class="space-y-3">
-                <div id="color-editor">
-                    <label class="text-xs block mb-1">カラー / フィルタ</label>
-                    <input type="color" id="colorPicker" oninput="updateColor(this.value)" class="w-full h-8 rounded cursor-pointer bg-transparent">
-                </div>
-                <div>
-                    <label class="text-xs block mb-1">サイズ</label>
-                    <input type="range" min="0.1" max="5" step="0.1" value="1" oninput="updateScale(this.value)" class="w-full">
-                </div>
-                <button onclick="removeSelected()" class="w-full bg-red-600 hover:bg-red-500 py-2 rounded text-sm font-bold transition">削除</button>
-            </div>
-        </div>
-
-        <div class="mt-6">
-            <button onclick="clearScene()" class="w-full border border-gray-600 hover:bg-gray-800 py-2 rounded text-sm transition text-gray-300">すべてクリア</button>
+    <div id="loading" class="loading-overlay">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-3"></div>
+            <p class="text-sm font-bold tracking-widest uppercase">3Dフォントを読み込み中...</p>
         </div>
     </div>
 
-    <div id="ar-instructions">床をゆっくりスキャンしてください...</div>
-    <button id="ar-button">ARを起動して床に置く</button>
+    <div id="ui-container" class="ui-panel glass-panel">
+        <h1 class="text-xl font-black mb-1 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 text-center tracking-tighter uppercase">AR Text Modeler</h1>
+        <p class="text-[10px] text-slate-500 text-center mb-6 tracking-widest uppercase">Solo Focus workspace</p>
+        
+        <div class="space-y-4 mb-6">
+            <h2 class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">テキスト作成</h2>
+            <div class="space-y-3">
+                <input type="text" id="textInput" placeholder="文字を入力..." maxlength="15" value="HELLO AR">
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="renderMode">
+                        <option value="geometry">3D文字</option>
+                        <option value="board">パネル文字</option>
+                    </select>
+                    <button onclick="generateNew()" class="btn-primary p-3 rounded-xl text-xs font-bold text-white shadow-lg">
+                        生成 / 更新
+                    </button>
+                </div>
+                <p class="text-[9px] text-slate-500 text-center italic">※生成するたびに前の文字はリセットされます</p>
+            </div>
+        </div>
+
+        <div id="edit-panel" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-300 border-t border-slate-800 pt-6">
+            <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">表示オプション</h2>
+            <div class="space-y-5">
+                <div>
+                    <label class="text-[10px] text-slate-400 block mb-2 font-bold uppercase tracking-tighter">スタイルプリセット</label>
+                    <select id="stylePreset" onchange="applyPreset(this.value)">
+                        <option value="custom">カスタム</option>
+                        <option value="neon">ネオン (発光)</option>
+                        <option value="metal">メタル (金属)</option>
+                        <option value="glass">クリスタル (透明)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-slate-400 block mb-2 font-bold uppercase tracking-tighter">カラー設定</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1">
+                            <span class="text-[9px] text-slate-500 uppercase">正面</span>
+                            <input type="color" id="frontColorPicker" value="#ffffff" oninput="updateColors()" class="h-8 p-1 cursor-pointer">
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-[9px] text-slate-500 uppercase">側面</span>
+                            <input type="color" id="sideColorPicker" value="#6366f1" oninput="updateColors()" class="h-8 p-1 cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-slate-400 block mb-2 uppercase font-bold tracking-tighter">アニメーション</label>
+                    <select id="animSelect" onchange="updateAnimation(this.value)">
+                        <option value="none">静止</option>
+                        <option value="rotate">回転</option>
+                        <option value="float">浮遊</option>
+                        <option value="pulse">脈動</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-slate-400 block mb-1 uppercase font-bold tracking-tighter">サイズ</label>
+                        <input type="range" id="scaleRange" min="0.1" max="3" step="0.1" value="1" oninput="updateScale(this.value)">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400 block mb-1 uppercase font-bold tracking-tighter">厚み</label>
+                        <input type="range" id="depthRange" min="0.01" max="1" step="0.01" value="0.2" oninput="updateDepth(this.value)">
+                    </div>
+                </div>
+
+                <button onclick="clearScene()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 py-3 rounded-xl text-[10px] font-bold transition-all border border-slate-700">
+                    リセット
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <button id="ar-button">ARを開始</button>
+    <div id="ar-status" class="fixed top-8 left-1/2 -translate-x-1/2 glass-panel px-6 py-2 rounded-full text-[10px] font-bold hidden z-50">平面（床など）を探してください...</div>
 
     <script>
-        let scene, camera, renderer, controls;
+        let scene, camera, renderer, controls, font;
         let objects = [];
         let selectedObject = null;
-        let raycaster = new THREE.Raycaster();
-        let mouse = new THREE.Vector2();
-
-        // AR related
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const clock = new THREE.Clock();
         let hitTestSource = null;
-        let hitTestSourceRequested = false;
         let reticle;
+
+        const fontLoader = new THREE.FontLoader();
+        const fontUrl = 'https://threejs.org/examples/fonts/helvetiker_bold.typeface.json';
 
         init();
         animate();
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a1a);
+            scene.background = new THREE.Color(0x020617);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(2, 2, 2);
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+            camera.position.set(1, 1, 1);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-            scene.add(ambientLight);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const pointLight = new THREE.PointLight(0xffffff, 1.2);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(5, 10, 5);
-            scene.add(directionalLight);
+            const grid = new THREE.GridHelper(10, 20, 0x1e293b, 0x0f172a);
+            grid.name = "grid";
+            scene.add(grid);
 
-            // Grid for Editor
-            const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
-            gridHelper.name = "editorGrid";
-            scene.add(gridHelper);
-
-            // AR Reticle
             reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0xffffff })
+                new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial({ color: 0x6366f1 })
             );
             reticle.matrixAutoUpdate = false;
             reticle.visible = false;
@@ -165,140 +206,214 @@
             window.addEventListener('resize', onWindowResize);
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
-            // AR Button setup
             if ('xr' in navigator) {
-                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                navigator.xr.isSessionSupported('immersive-ar').then(supported => {
                     if (supported) {
-                        const arBtn = document.getElementById('ar-button');
-                        arBtn.style.display = 'block';
-                        arBtn.onclick = startAR;
+                        const btn = document.getElementById('ar-button');
+                        btn.style.display = 'block';
+                        btn.onclick = startAR;
                     }
                 });
             }
+
+            fontLoader.load(fontUrl, (loadedFont) => {
+                font = loadedFont;
+                document.getElementById('loading').style.display = 'none';
+                generateNew(); // 最初の一文字を生成
+            });
         }
 
-        function addObject(type) {
-            let geometry;
-            switch(type) {
-                case 'box': geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3); break;
-                case 'sphere': geometry = new THREE.SphereGeometry(0.2, 32, 32); break;
-                case 'cylinder': geometry = new THREE.CylinderGeometry(0.15, 0.15, 0.3, 32); break;
-                case 'torus': geometry = new THREE.TorusGeometry(0.15, 0.05, 16, 100); break;
+        function createTextGeometry(text, depth) {
+            return new THREE.TextGeometry(text, {
+                font: font,
+                size: 0.3,
+                height: depth,
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.02,
+                bevelSize: 0.01,
+                bevelOffset: 0,
+                bevelSegments: 5
+            });
+        }
+
+        function createBoardGeometry(text) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 1024; canvas.height = 512;
+            ctx.clearRect(0,0,1024,512);
+            ctx.font = "Bold 160px sans-serif";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.strokeStyle = "rgba(0,0,0,0.8)"; ctx.lineWidth = 15;
+            ctx.strokeText(text, 512, 256);
+            ctx.fillStyle = "white"; ctx.fillText(text, 512, 256);
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            const frontMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+            const sideMat = new THREE.MeshStandardMaterial({ color: 0x6366f1 });
+            
+            const textWidth = ctx.measureText(text).width / 500;
+            const geo = new THREE.BoxGeometry(textWidth + 0.2, 0.5, 0.1);
+            const mesh = new THREE.Mesh(geo, [sideMat, sideMat, sideMat, sideMat, frontMat, sideMat]);
+            return mesh;
+        }
+
+        // 新しく生成するたびにリセットする
+        function generateNew() {
+            clearScene();
+            
+            const textStr = document.getElementById('textInput').value || "HELLO";
+            const mode = document.getElementById('renderMode').value;
+            const depth = parseFloat(document.getElementById('depthRange').value);
+            let mesh;
+
+            if (mode === 'geometry' && font) {
+                const geo = createTextGeometry(textStr, depth);
+                geo.center();
+                const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.2 });
+                mesh = new THREE.Mesh(geo, mat);
+            } else {
+                mesh = createBoardGeometry(textStr);
             }
 
-            const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.userData.type = 'shape';
-            
-            mesh.position.set(0, 0.15, 0);
+            mesh.userData.type = mode;
+            mesh.userData.animation = 'none';
+            mesh.userData.baseY = 0.2;
+            mesh.userData.savedScale = 1.0;
+            mesh.position.set(0, 0.2, 0);
+
             scene.add(mesh);
             objects.push(mesh);
             selectObject(mesh);
         }
 
-        function handlePhotoUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        function applyPreset(val) {
+            if (!selectedObject) return;
+            const mat = selectedObject.material;
+            const mats = Array.isArray(mat) ? mat : [mat];
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const textureLoader = new THREE.TextureLoader();
-                textureLoader.load(e.target.result, (texture) => {
-                    const img = texture.image;
-                    const aspect = img.width / img.height;
-                    
-                    // Standard height 0.5m in AR
-                    const h = 0.5;
-                    const w = h * aspect;
-
-                    const geometry = new THREE.PlaneGeometry(w, h);
-                    const material = new THREE.MeshStandardMaterial({ 
-                        map: texture, 
-                        side: THREE.DoubleSide,
-                        transparent: true
-                    });
-                    
-                    const mesh = new THREE.Mesh(geometry, material);
-                    mesh.userData.type = 'photo';
-                    mesh.userData.originalAspect = aspect;
-                    
-                    // Stand up vertically
-                    mesh.position.set(0, h/2, 0);
-                    
-                    scene.add(mesh);
-                    objects.push(mesh);
-                    selectObject(mesh);
-                });
-            };
-            reader.readAsDataURL(file);
+            mats.forEach(m => {
+                switch(val) {
+                    case 'neon':
+                        m.emissive.set(m.color);
+                        m.emissiveIntensity = 1.2;
+                        m.metalness = 0;
+                        m.roughness = 1;
+                        break;
+                    case 'metal':
+                        m.emissiveIntensity = 0;
+                        m.metalness = 1.0;
+                        m.roughness = 0.1;
+                        break;
+                    case 'glass':
+                        m.transparent = true;
+                        m.opacity = 0.5;
+                        m.metalness = 0.2;
+                        m.roughness = 0;
+                        break;
+                    default:
+                        m.emissiveIntensity = 0;
+                        m.opacity = 1.0;
+                        m.metalness = 0.5;
+                        m.roughness = 0.4;
+                }
+            });
         }
 
-        function onPointerDown(event) {
-            if (renderer.xr.isPresenting) return;
+        function updateColors() {
+            if (!selectedObject) return;
+            const frontCol = document.getElementById('frontColorPicker').value;
+            const sideCol = document.getElementById('sideColorPicker').value;
 
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(objects);
-
-            if (intersects.length > 0) {
-                selectObject(intersects[0].object);
+            if (Array.isArray(selectedObject.material)) {
+                selectedObject.material[4].color.set(frontCol);
+                [0,1,2,3,5].forEach(i => selectedObject.material[i].color.set(sideCol));
             } else {
-                deselectObject();
+                selectedObject.material.color.set(frontCol);
+            }
+        }
+
+        function updateDepth(val) {
+            if (!selectedObject) return;
+            const d = parseFloat(val);
+            const text = document.getElementById('textInput').value;
+            
+            if (selectedObject.userData.type === 'geometry') {
+                const oldPos = selectedObject.position.clone();
+                const oldMat = selectedObject.material;
+                selectedObject.geometry.dispose();
+                selectedObject.geometry = createTextGeometry(text, d);
+                selectedObject.geometry.center();
+                selectedObject.position.copy(oldPos);
+            } else {
+                selectedObject.scale.z = d * 5; 
+            }
+            document.getElementById('depthDisplay').innerText = d + 'x';
+        }
+
+        function updateScale(val) {
+            if (!selectedObject) return;
+            const s = parseFloat(val);
+            selectedObject.userData.savedScale = s;
+            selectedObject.scale.set(s, s, selectedObject.scale.z);
+            document.getElementById('scaleDisplay').innerText = s.toFixed(1) + 'x';
+        }
+
+        function updateAnimation(val) {
+            if (!selectedObject) return;
+            selectedObject.userData.animation = val;
+            if (val === 'none') {
+                selectedObject.rotation.set(0, 0, 0);
+            }
+        }
+
+        function onPointerDown(e) {
+            if (renderer.xr.isPresenting) return;
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects, true);
+            if (intersects.length > 0) {
+                let t = intersects[0].object;
+                while(t.parent && !objects.includes(t)) t = t.parent;
+                selectObject(t);
             }
         }
 
         function selectObject(obj) {
-            deselectObject();
+            if (selectedObject) deselectObject();
             selectedObject = obj;
             document.getElementById('edit-panel').classList.remove('hidden');
-            document.getElementById('colorPicker').value = '#' + obj.material.color.getHexString();
             
-            // Add outline
-            let outlineGeo;
-            if (obj.userData.type === 'photo') {
-                outlineGeo = new THREE.EdgesGeometry(obj.geometry);
-            } else {
-                outlineGeo = new THREE.EdgesGeometry(obj.geometry);
-            }
-            const line = new THREE.LineSegments(outlineGeo, new THREE.LineBasicMaterial({ color: 0x3b82f6 }));
-            line.name = "selectionOutline";
-            obj.add(line);
+            // UIの値を選択したオブジェクトの状態に同期
+            document.getElementById('animSelect').value = obj.userData.animation;
+            document.getElementById('scaleRange').value = obj.userData.savedScale;
+            document.getElementById('scaleDisplay').innerText = obj.userData.savedScale.toFixed(1) + 'x';
+            
+            const helper = new THREE.LineSegments(
+                new THREE.EdgesGeometry(obj.geometry), 
+                new THREE.LineBasicMaterial({ color: 0x6366f1, linewidth: 2 })
+            );
+            helper.name = "outline";
+            obj.add(helper);
         }
 
         function deselectObject() {
             if (selectedObject) {
-                const outline = selectedObject.getObjectByName("selectionOutline");
-                if (outline) selectedObject.remove(outline);
+                const h = selectedObject.getObjectByName("outline");
+                if (h) selectedObject.remove(h);
             }
             selectedObject = null;
             document.getElementById('edit-panel').classList.add('hidden');
         }
 
-        function updateColor(hex) {
-            if (selectedObject) {
-                selectedObject.material.color.set(hex);
-            }
-        }
-
-        function updateScale(val) {
-            if (selectedObject) {
-                const s = parseFloat(val);
-                selectedObject.scale.set(s, s, s);
-            }
-        }
-
-        function removeSelected() {
-            if (selectedObject) {
-                scene.remove(selectedObject);
-                objects = objects.filter(o => o !== selectedObject);
-                deselectObject();
-            }
-        }
-
         function clearScene() {
-            objects.forEach(obj => scene.remove(obj));
+            objects.forEach(o => {
+                if(o.geometry) o.geometry.dispose();
+                if(Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+                else if(o.material) o.material.dispose();
+                scene.remove(o);
+            });
             objects = [];
             deselectObject();
         }
@@ -310,84 +425,64 @@
         }
 
         async function startAR() {
-            const sessionInit = { requiredFeatures: ['hit-test'] };
-            const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
-            
-            renderer.xr.setReferenceSpaceType('local');
+            const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test', 'local-floor'] });
+            renderer.xr.setReferenceSpaceType('local-floor');
             await renderer.xr.setSession(session);
-
-            document.getElementById('ui-container').style.opacity = '0';
-            document.getElementById('ui-container').style.pointerEvents = 'none';
-            document.getElementById('ar-button').style.display = 'none';
-            document.getElementById('ar-instructions').style.display = 'block';
             
-            const grid = scene.getObjectByName("editorGrid");
-            if (grid) grid.visible = false;
-
+            document.getElementById('ui-container').style.opacity = '0';
+            document.getElementById('ar-status').style.display = 'block';
+            scene.getObjectByName("grid").visible = false;
+            
             session.addEventListener('end', () => {
-                hitTestSourceRequested = false;
-                hitTestSource = null;
-                reticle.visible = false;
                 document.getElementById('ui-container').style.opacity = '1';
-                document.getElementById('ui-container').style.pointerEvents = 'auto';
-                document.getElementById('ar-button').style.display = 'block';
-                document.getElementById('ar-instructions').style.display = 'none';
-                if (grid) grid.visible = true;
+                document.getElementById('ar-status').style.display = 'none';
+                scene.getObjectByName("grid").visible = true;
             });
-
+            
             session.addEventListener('select', () => {
-                if (reticle.visible) {
-                    if (selectedObject) {
-                        const pos = new THREE.Vector3();
-                        const quat = new THREE.Quaternion();
-                        const scale = new THREE.Vector3();
-                        reticle.matrix.decompose(pos, quat, scale);
-                        
-                        // Set position but keep vertical if it's a photo
-                        selectedObject.position.copy(pos);
-                        if (selectedObject.userData.type === 'photo') {
-                            // Adjust Y so it sits on the floor
-                            const h = 0.5 * selectedObject.scale.y;
-                            selectedObject.position.y += h;
-                        }
-                    }
+                if (reticle.visible && selectedObject) {
+                    const pos = new THREE.Vector3();
+                    reticle.matrix.decompose(pos, new THREE.Quaternion(), new THREE.Vector3());
+                    selectedObject.position.x = pos.x;
+                    selectedObject.position.z = pos.z;
                 }
             });
         }
 
         function animate() {
             renderer.setAnimationLoop((timestamp, frame) => {
+                const time = clock.getElapsedTime();
+                objects.forEach(obj => {
+                    const anim = obj.userData.animation;
+                    const baseS = obj.userData.savedScale || 1.0;
+                    if (anim === 'rotate') obj.rotation.y += 0.02;
+                    else if (anim === 'float') obj.position.y = obj.userData.baseY + Math.sin(time * 2) * 0.1 * obj.scale.y;
+                    else if (anim === 'pulse') {
+                        const s = baseS + Math.sin(time * 5) * 0.1 * baseS;
+                        obj.scale.set(s, s, obj.scale.z);
+                    }
+                });
+                
                 if (frame) {
-                    const referenceSpace = renderer.xr.getReferenceSpace();
                     const session = renderer.xr.getSession();
-
-                    if (hitTestSourceRequested === false) {
-                        session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                            session.requestHitTestSource({ space: referenceSpace }).then((source) => {
-                                hitTestSource = source;
-                            });
-                        });
+                    const rs = renderer.xr.getReferenceSpace();
+                    if (!hitTestSourceRequested) {
+                        session.requestReferenceSpace('viewer').then(ref => session.requestHitTestSource({ space: ref }).then(s => hitTestSource = s));
                         hitTestSourceRequested = true;
                     }
-
                     if (hitTestSource) {
-                        const hitTestResults = frame.getHitTestResults(hitTestSource);
-                        if (hitTestResults.length) {
-                            const hit = hitTestResults[0];
+                        const results = frame.getHitTestResults(hitTestSource);
+                        if (results.length) {
                             reticle.visible = true;
-                            reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                            document.getElementById('ar-instructions').innerText = "タップして写真を配置";
+                            reticle.matrix.fromArray(results[0].getPose(rs).transform.matrix);
+                            document.getElementById('ar-status').innerText = "地面をタップして文字を移動";
                         } else {
                             reticle.visible = false;
-                            document.getElementById('ar-instructions').innerText = "床を探しています...";
+                            document.getElementById('ar-status').innerText = "平面を探しています...";
                         }
                     }
                 }
-
-                if (!renderer.xr.isPresenting) {
-                    controls.update();
-                }
-                
+                controls.update();
                 renderer.render(scene, camera);
             });
         }
