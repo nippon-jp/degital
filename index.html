@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Text Studio - Optimized UI</title>
+    <title>AR Text Studio - Auto-Update Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
@@ -13,179 +13,112 @@
         body { margin: 0; overflow: hidden; font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #020617; color: #f8fafc; }
         canvas { display: block; outline: none; }
         
-        /* Glassmorphism Inspector */
         .inspector-panel {
-            background: rgba(15, 23, 42, 0.9);
+            background: rgba(15, 23, 42, 0.92);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-left: 1px solid rgba(255, 255, 255, 0.1);
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .ui-overlay {
-            position: fixed;
-            z-index: 100;
-            pointer-events: none;
-        }
+        .ui-overlay { position: fixed; z-index: 100; pointer-events: none; }
         .ui-overlay > * { pointer-events: auto; }
 
         @media (max-width: 767px) {
             .inspector-panel {
-                bottom: 0;
-                left: 0;
-                width: 100%;
-                border-left: none;
+                bottom: 0; left: 0; width: 100%; border-left: none;
                 border-top: 1px solid rgba(255, 255, 255, 0.1);
-                max-height: 50vh;
-                border-radius: 24px 24px 0 0;
-                transform: translateY(0);
+                max-height: 55vh; border-radius: 24px 24px 0 0;
             }
-            /* Panel Hidden State (Mobile) */
-            .inspector-panel.minimized {
-                transform: translateY(calc(100% - 60px));
-            }
+            .inspector-panel.minimized { transform: translateY(calc(100% - 60px)); }
         }
 
         @media (min-width: 768px) {
-            .inspector-panel {
-                top: 0;
-                right: 0;
-                width: 320px;
-                height: 100vh;
-                transform: translateX(0);
-            }
-            /* Panel Hidden State (Desktop) */
-            .inspector-panel.minimized {
-                transform: translateX(320px);
-            }
+            .inspector-panel { top: 0; right: 0; width: 340px; height: 100vh; }
+            .inspector-panel.minimized { transform: translateX(340px); }
         }
 
-        input, select { background: #111827; color: white; border: 1px solid #374151; border-radius: 10px; padding: 12px; width: 100%; outline: none; font-size: 16px; }
+        input, select { background: #111827; color: white; border: 1px solid #374151; border-radius: 10px; padding: 12px; width: 100%; outline: none; font-size: 15px; }
         input:focus { border-color: #6366f1; }
         input[type="range"] { height: 8px; border-radius: 4px; appearance: none; background: #374151; }
-        input[type="range"]::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #6366f1; cursor: pointer; border: 2px solid #fff; }
+        input[type="range"]::-webkit-slider-thumb { appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #6366f1; cursor: pointer; border: 2px solid #fff; box-shadow: 0 0 10px rgba(99,102,241,0.5); }
 
         #ar-start-btn {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 200;
-            padding: 16px 40px;
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            z-index: 200; padding: 16px 40px;
             background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-            color: #fff;
-            border-radius: 9999px;
-            font-weight: 900;
-            text-transform: uppercase;
-            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
-            display: none;
-            border: none;
-            width: 80%;
-            max-width: 250px;
-            transition: opacity 0.3s;
+            color: #fff; border-radius: 9999px; font-weight: 900;
+            text-transform: uppercase; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+            display: none; border: none; width: 85%; max-width: 300px;
         }
 
-        /* Minimize Toggle Button */
-        .minimize-toggle {
-            cursor: pointer;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0;
-        }
-
-        .handle-bar {
-            width: 40px;
-            height: 4px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
-            margin-bottom: 4px;
-        }
+        .minimize-toggle { cursor: pointer; width: 100%; display: flex; flex-direction: column; align-items: center; padding: 12px 0; }
+        .handle-bar { width: 40px; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
 
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
 
-        /* Floating UI to reopen on desktop */
         #reopen-btn {
-            position: fixed;
-            top: 24px;
-            right: 24px;
-            z-index: 110;
-            background: #6366f1;
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            position: fixed; top: 24px; right: 24px; z-index: 110;
+            background: #6366f1; width: 48px; height: 48px; border-radius: 14px;
+            display: none; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
 
-    <!-- Loading Screen -->
     <div id="loading" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center z-[300]">
         <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p class="text-xs font-black tracking-widest text-slate-500 uppercase italic">Initializing Reality Studio...</p>
+        <p class="text-xs font-black tracking-widest text-slate-500 uppercase italic">リアルタイムエンジン起動中...</p>
     </div>
 
-    <!-- Viewport Label -->
     <div class="ui-overlay top-6 left-6 hidden md:block">
         <h1 class="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter">TEXT AR STUDIO</h1>
-        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">3D Workspace</p>
+        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">リアルタイム・モデラー</p>
     </div>
 
-    <!-- Reopen Button (Desktop) -->
     <button id="reopen-btn" onclick="toggleInspector()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
     </button>
 
-    <!-- AR Interface -->
-    <button id="ar-start-btn" onclick="startAR()">ARで空間に配置する</button>
+    <button id="ar-start-btn" onclick="startAR()">ARを起動して配置する</button>
     <div id="ar-status" class="fixed top-8 left-1/2 -translate-x-1/2 glass-panel px-8 py-3 rounded-full text-xs font-bold hidden z-[150] bg-indigo-600 border border-indigo-400 text-white shadow-2xl">床をスキャンしてください</div>
 
-    <!-- Inspector Panel -->
     <div id="ui-container" class="inspector-panel ui-overlay flex flex-col">
-        <!-- Toggle Handle -->
         <div class="minimize-toggle" onclick="toggleInspector()">
             <div class="handle-bar"></div>
-            <span id="toggle-label" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest sm:hidden">設定を開く / 閉じる</span>
+            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest sm:hidden mt-2">スワイプで閉じる</span>
         </div>
         
-        <div id="panel-content" class="px-6 pb-8 overflow-y-auto custom-scroll flex-1 space-y-8">
-            
-            <!-- OBJECT SECTION -->
+        <div id="panel-content" class="px-6 pb-10 overflow-y-auto custom-scroll flex-1 space-y-8">
             <section class="space-y-4">
                 <h2 class="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>作成・編集
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>基本設定
                 </h2>
                 <div class="space-y-3">
-                    <input type="text" id="textInput" placeholder="文字を入力..." maxlength="15" value="HELLO AR" oninput="generateNew()">
+                    <input type="text" id="textInput" placeholder="文字を入力..." maxlength="15" value="TEXT AR" oninput="generateNew()">
                     <select id="renderMode" onchange="generateNew()">
+                        <option value="board">パネル文字 (日本語対応)</option>
                         <option value="geometry">3D立体文字 (英数字)</option>
-                        <option value="board" selected>パネル文字 (日本語推奨)</option>
                     </select>
                 </div>
             </section>
 
-            <!-- TRANSFORM SECTION -->
             <section class="space-y-4">
                 <h2 class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>変形
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>トランスフォーム（自動更新）
                 </h2>
-                <div class="grid grid-cols-1 gap-4">
-                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                <div class="space-y-4">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
                         <div class="flex justify-between mb-2">
                             <span class="text-[10px] text-slate-400 font-bold uppercase">スケール</span>
                             <span id="scaleDisplay" class="text-[10px] font-mono text-indigo-400 font-bold">1.0x</span>
                         </div>
                         <input type="range" id="scaleRange" min="0.1" max="4" step="0.1" value="1" oninput="updateScale(this.value)">
                     </div>
-                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
                         <div class="flex justify-between mb-2">
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">厚み</span>
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">厚み（奥行き）</span>
                             <span id="depthDisplay" class="text-[10px] font-mono text-indigo-400 font-bold">0.2x</span>
                         </div>
                         <input type="range" id="depthRange" min="0.01" max="1.5" step="0.01" value="0.2" oninput="updateDepth(this.value)">
@@ -193,39 +126,38 @@
                 </div>
             </section>
 
-            <!-- APPEARANCE SECTION -->
             <section class="space-y-4">
                 <h2 class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>マテリアル & アニメ
                 </h2>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">質感</label>
+                        <label class="text-[9px] text-slate-400 uppercase font-bold">質感プリセット</label>
                         <select id="stylePreset" onchange="applyPreset(this.value)">
                             <option value="custom">標準</option>
-                            <option value="neon">ネオン</option>
-                            <option value="metal">メタル</option>
-                            <option value="glass">ガラス</option>
+                            <option value="neon">ネオン（発光）</option>
+                            <option value="metal">メタル（反射）</option>
+                            <option value="glass">クリスタル（透過）</option>
                         </select>
                     </div>
                     <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">動作</label>
+                        <label class="text-[9px] text-slate-400 uppercase font-bold">動作（アニメ）</label>
                         <select id="animSelect" onchange="updateAnimation(this.value)">
-                            <option value="none">静止</option>
+                            <option value="none">なし</option>
                             <option value="rotate">回転</option>
                             <option value="float">浮遊</option>
                             <option value="pulse">脈動</option>
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">表面色</label>
-                        <input type="color" id="frontColorPicker" value="#ffffff" oninput="updateColors()" class="h-10 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
+                        <label class="text-[9px] text-slate-400 uppercase font-bold">表面の色</label>
+                        <input type="color" id="frontColorPicker" value="#ffffff" oninput="updateColors()" class="h-12 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
                     </div>
                     <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">側面色</label>
-                        <input type="color" id="sideColorPicker" value="#6366f1" oninput="updateColors()" class="h-10 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
+                        <label class="text-[9px] text-slate-400 uppercase font-bold">側面の色</label>
+                        <input type="color" id="sideColorPicker" value="#6366f1" oninput="updateColors()" class="h-12 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
                     </div>
                 </div>
             </section>
@@ -267,7 +199,7 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
-            controls.dampingFactor = 0.08;
+            controls.dampingFactor = 0.1;
             controls.target.set(0, 0.3, 0);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
@@ -305,22 +237,16 @@
             });
         }
 
-        // UI Panel Toggle Logic
         function toggleInspector() {
             const panel = document.getElementById('ui-container');
             const reopenBtn = document.getElementById('reopen-btn');
-            const arBtn = document.getElementById('ar-start-btn');
             isMinimizing = !isMinimizing;
-
             if (isMinimizing) {
                 panel.classList.add('minimized');
                 if (window.innerWidth >= 768) reopenBtn.style.display = 'flex';
-                arBtn.style.opacity = "1";
             } else {
                 panel.classList.remove('minimized');
                 reopenBtn.style.display = 'none';
-                // Mobile: If UI is open, make AR button slightly transparent to show content
-                if (window.innerWidth < 768) arBtn.style.opacity = "0.3";
             }
         }
 
@@ -372,12 +298,18 @@
         }
 
         function generateNew() {
+            // 現在のトランスフォームとアニメーションを保持
+            const oldPos = selectedObject ? selectedObject.position.clone() : new THREE.Vector3(0,0,0);
+            const oldRot = selectedObject ? selectedObject.rotation.clone() : new THREE.Euler(0,0,0);
+            
             clearScene();
+            
             const textStr = document.getElementById('textInput').value || "AR";
             const modeInput = document.getElementById('renderMode').value;
             const depth = parseFloat(document.getElementById('depthRange').value);
             const isJapanese = /[^\x00-\x7F]/.test(textStr);
             const actualMode = isJapanese ? 'board' : modeInput;
+            
             if (isJapanese) document.getElementById('renderMode').value = 'board';
 
             let mesh;
@@ -394,15 +326,22 @@
                 mesh.userData.animation = document.getElementById('animSelect').value;
                 mesh.userData.baseY = 0;
                 mesh.userData.savedScale = parseFloat(document.getElementById('scaleRange').value);
-                mesh.position.set(0, 0, 0);
+                
+                mesh.position.copy(oldPos);
+                mesh.rotation.copy(oldRot);
                 mesh.scale.set(mesh.userData.savedScale, mesh.userData.savedScale, mesh.scale.z);
+                
                 scene.add(mesh);
                 objects.push(mesh);
                 selectedObject = mesh;
+                
+                // 他のリアルタイム項目も再適用
                 updateColors();
                 applyPreset(document.getElementById('stylePreset').value);
             } catch (e) { console.error(e); }
         }
+
+        // --- 自動反映機能の実装 ---
 
         function applyPreset(val) {
             if (!selectedObject) return;
@@ -431,7 +370,7 @@
 
         function updateDepth(val) {
             document.getElementById('depthDisplay').innerText = val + 'x';
-            generateNew();
+            generateNew(); // 厚みはジオメトリを再構築
         }
 
         function updateScale(val) {
@@ -473,12 +412,14 @@
                 const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test', 'local-floor'] });
                 renderer.xr.setReferenceSpaceType('local-floor');
                 await renderer.xr.setSession(session);
-                document.getElementById('ui-container').style.display = 'none';
+                document.getElementById('ui-container').classList.add('minimized');
+                isMinimizing = true;
                 document.getElementById('ar-start-btn').style.display = 'none';
                 document.getElementById('ar-status').style.display = 'block';
                 scene.getObjectByName("grid").visible = false;
                 session.addEventListener('end', () => {
-                    document.getElementById('ui-container').style.display = 'flex';
+                    document.getElementById('ui-container').classList.remove('minimized');
+                    isMinimizing = false;
                     document.getElementById('ar-start-btn').style.display = 'block';
                     document.getElementById('ar-status').style.display = 'none';
                     scene.getObjectByName("grid").visible = true;
