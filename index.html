@@ -306,7 +306,24 @@
   <div class="field">
     <div class="field-label">テキスト（日本語・英数字対応）</div>
     <textarea id="text-input" placeholder="日本語・English&#10;どちらも3D化できます">日本語</textarea>
+    <div id="auto-update-hint" style="font-size:10px;color:var(--sub);text-align:right;margin-top:2px;">✦ 入力すると自動更新</div>
     <div id="font-warn">⚠ フォント読み込みに失敗しました。日本語が表示できない場合があります。</div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">フォント選択</div>
+    <select id="font-select">
+      <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
+      <option value="notoserif">Noto Serif JP（明朝体）</option>
+      <option value="rocknroll">RocknRoll One（ポップ）</option>
+      <option value="dotgothic">DotGothic16（ドット）</option>
+      <option value="rampart">Rampart One（アウトライン）</option>
+      <option value="local">ローカルファイル（./fonts/）</option>
+    </select>
+    <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:4px;overflow:hidden;display:none;">
+      <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s;"></div>
+    </div>
+    <div id="font-status-label" style="font-size:10px;color:var(--sub);margin-top:3px;"></div>
   </div>
 
   <div class="panel-title">トランスフォーム</div>
@@ -390,11 +407,41 @@
 <script>
 // ===== グローバル変数 =====
 let opentypeFont = null;
+let fontCache = {};
 let scene, camera, renderer, textGroup;
 let animMode = 'none';
 let matMode = 'standard';
 let clock;
 let animId;
+let autoUpdateTimer = null;
+
+// ===== フォント定義 =====
+const FONT_DEFS = {
+  mplus1p: {
+    name: 'M PLUS 1p',
+    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplus1p/MPLUS1p-Regular.ttf'
+  },
+  notoserif: {
+    name: 'Noto Serif JP',
+    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoserif/NotoSerif-Regular.ttf'
+  },
+  rocknroll: {
+    name: 'RocknRoll One',
+    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rocknrollone/RocknRollOne-Regular.ttf'
+  },
+  dotgothic: {
+    name: 'DotGothic16',
+    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf'
+  },
+  rampart: {
+    name: 'Rampart One',
+    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rampartone/RampartOne-Regular.ttf'
+  },
+  local: {
+    name: 'ローカル (./fonts/NotoSansJP-Regular.ttf)',
+    url: './fonts/NotoSansJP-Regular.ttf'
+  },
+};
 
 // ===== Three.js 初期化 =====
 function initThree() {
@@ -795,90 +842,83 @@ function setStatus(msg, type = '') {
   el.className = type;
 }
 
-// ===== フォント読み込み（Google Fonts API経由のOTF） =====
-async function loadFont() {
-  setStatus('フォント読み込み中…');
-
-  // 複数のフォールバックURLを試す
-  const fontUrls = [
-    // Noto Sans JP (サブセット・軽量版)
-    'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.woff2',
-    // M PLUS Rounded 1c (日本語対応・軽量)
-    'https://fonts.gstatic.com/s/mplusrounded1c/v15/VdGBAYIAV6gnpUpoWwNkYvrugw9RuM0q5AvkmQa1AA.woff2',
-  ];
-
+// ===== フォント読み込み（キャッシュ対応） =====
+async function loadFont(fontKey) {
   // opentype.jsが読み込まれるまで待機
   let retry = 0;
   while (typeof opentype === 'undefined' && retry < 50) {
     await new Promise(r => setTimeout(r, 100));
     retry++;
   }
-
   if (typeof opentype === 'undefined') {
-    document.getElementById('font-warn').style.display = 'block';
     setStatus('⚠ opentype.js 読み込み失敗', 'err');
     return false;
   }
 
-  // OTF/TTFを直接フェッチして読み込む
-  // CORSの制限があるためGoogleのAPIを使用
-  const ttfUrl = 'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.woff2';
+  const def = FONT_DEFS[fontKey] || FONT_DEFS['mplus1p'];
 
-  // woff2はopentype.jsで直接読めないため、別アプローチ
-  // Google Fonts CSS APIからフォントURLを取得
-  return await loadFontFallback();
-}
-
-async function loadFontFallback() {
-  // opentype.jsはTTF/OTFのバイナリを直接読む
-  // CORS対応しているフォントのみ使用可能
-
-  const candidates = [
-    {
-      name: 'Noto Sans 1p',
-      url: './fonts/NotoSansJP-VariableFont_wght.ttf'
-    },
-    {
-      name: 'Noto Sans JP',
-      url: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-jp@4.5.12/files/noto-sans-jp-japanese-400-normal.woff2'
-    }
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      setStatus(`フォント読み込み中: ${candidate.name}…`);
-      const font = await new Promise((resolve, reject) => {
-        opentype.load(candidate.url, (err, font) => {
-          if (err) reject(err);
-          else resolve(font);
-        });
-      });
-      opentypeFont = font;
-      setStatus(`✓ ${candidate.name} 読み込み完了`, 'ok');
-      return true;
-    } catch (e) {
-      console.warn(`Failed to load ${candidate.name}:`, e);
-    }
+  // キャッシュがあればそれを使用
+  if (fontCache[fontKey]) {
+    opentypeFont = fontCache[fontKey];
+    setFontStatus(`✓ ${def.name}`, 'ok');
+    return true;
   }
 
-  // 最終フォールバック：jsDelivr経由
+  setFontStatus(`読み込み中…`);
+  showFontProgress(0);
+
   try {
-    setStatus('フォント読み込み中（代替）…');
     const font = await new Promise((resolve, reject) => {
-      opentype.load(
-        'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/test/fonts/Roboto-Black.ttf',
-        (err, font) => { if (err) reject(err); else resolve(font); }
-      );
+      opentype.load(def.url, (err, font) => {
+        if (err) reject(err);
+        else resolve(font);
+      });
     });
+    fontCache[fontKey] = font;
     opentypeFont = font;
-    setStatus('ℹ 英字フォントで動作中（日本語フォントの読み込みに失敗）', '');
-    document.getElementById('font-warn').style.display = 'block';
+    showFontProgress(100);
+    setFontStatus(`✓ ${def.name} 読み込み完了`);
+    setStatus(`✓ ${def.name} 読み込み完了`, 'ok');
     return true;
   } catch (e) {
-    document.getElementById('font-warn').style.display = 'block';
-    setStatus('⚠ フォント読み込み失敗', 'err');
-    return false;
+    console.warn(`Failed: ${def.name}`, e);
+    // フォールバック
+    try {
+      const fallback = await new Promise((resolve, reject) => {
+        opentype.load(
+          'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/test/fonts/Roboto-Black.ttf',
+          (err, font) => { if (err) reject(err); else resolve(font); }
+        );
+      });
+      opentypeFont = fallback;
+      setFontStatus('⚠ 英字フォントで代替中');
+      document.getElementById('font-warn').style.display = 'block';
+      return true;
+    } catch (e2) {
+      setFontStatus('⚠ 読み込み失敗');
+      setStatus('⚠ フォント読み込み失敗', 'err');
+      return false;
+    }
   }
+}
+
+function setFontStatus(msg) {
+  document.getElementById('font-status-label').textContent = msg;
+}
+
+function showFontProgress(pct) {
+  const bar = document.getElementById('font-loading-bar');
+  const prog = document.getElementById('font-loading-progress');
+  bar.style.display = 'block';
+  prog.style.width = pct + '%';
+  if (pct >= 100) setTimeout(() => { bar.style.display = 'none'; }, 600);
+}
+
+// ===== debounce付き自動更新 =====
+function scheduleUpdate(delay = 600) {
+  if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
+  setStatus('入力中…');
+  autoUpdateTimer = setTimeout(() => generate3DText(), delay);
 }
 
 // ===== UI イベント =====
@@ -894,7 +934,29 @@ function setupUI() {
     const valEl = document.getElementById(valId);
     el.addEventListener('input', () => {
       valEl.textContent = parseFloat(el.value).toFixed(decimals) + suffix;
+      scheduleUpdate(300);
     });
+  });
+
+  // テキスト入力：自動更新（debounce 700ms）
+  document.getElementById('text-input').addEventListener('input', () => {
+    scheduleUpdate(700);
+  });
+  // Enterキーで即時更新（Shift+Enterで改行）
+  document.getElementById('text-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
+      generate3DText();
+    }
+  });
+
+  // フォント選択
+  document.getElementById('font-select').addEventListener('change', async (e) => {
+    const key = e.target.value;
+    setStatus(`フォント切替中: ${FONT_DEFS[key]?.name || key}…`);
+    const ok = await loadFont(key);
+    if (ok) scheduleUpdate(100);
   });
 
   // マテリアルプリセット
@@ -903,6 +965,7 @@ function setupUI() {
       document.querySelectorAll('[data-mat]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       matMode = btn.dataset.mat;
+      scheduleUpdate(200);
     });
   });
 
@@ -919,15 +982,14 @@ function setupUI() {
     });
   });
 
-  // 生成ボタン
-  document.getElementById('gen-btn').addEventListener('click', generate3DText);
+  // カラー変更も自動更新
+  document.getElementById('color-front').addEventListener('input', () => scheduleUpdate(300));
+  document.getElementById('color-side').addEventListener('input', () => scheduleUpdate(300));
 
-  // Enterキーでも生成（Shift+Enterで改行）
-  document.getElementById('text-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      generate3DText();
-    }
+  // 生成ボタン（手動でも押せる）
+  document.getElementById('gen-btn').addEventListener('click', () => {
+    if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
+    generate3DText();
   });
 
   // リセット
@@ -939,6 +1001,7 @@ function setupUI() {
     textGroup.position.set(0, 0, 0);
     document.getElementById('text-input').value = '日本語';
     setStatus('リセットしました');
+    scheduleUpdate(300);
   });
 
   // パネル開閉（モバイル）
@@ -952,7 +1015,10 @@ async function main() {
   initThree();
   setupUI();
 
-  const ok = await loadFont();
+  // 初期フォントはセレクトの選択値で読み込む
+  const initKey = document.getElementById('font-select').value;
+  setStatus('フォント読み込み中…');
+  const ok = await loadFont(initKey);
 
   // ローディング非表示
   const loading = document.getElementById('loading');
@@ -960,7 +1026,6 @@ async function main() {
   setTimeout(() => loading.style.display = 'none', 700);
 
   if (ok && opentypeFont) {
-    // 初期テキストを自動生成
     await generate3DText();
   }
 }
