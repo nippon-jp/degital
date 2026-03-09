@@ -203,9 +203,9 @@
     padding: 2px;
   }
 
-  /* 生成ボタン */
-  #gen-btn {
-    background: linear-gradient(135deg, #1a6fff, #0af);
+  /* ARボタン */
+  #ar-btn {
+    background: linear-gradient(135deg, #1a7a3f, #0f5);
     border: none;
     border-radius: 10px;
     color: #fff;
@@ -216,22 +216,13 @@
     cursor: pointer;
     letter-spacing: 0.06em;
     transition: all 0.2s;
-    box-shadow: 0 4px 20px rgba(68,170,255,0.3);
-    position: relative;
-    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,255,80,0.25);
   }
-  #gen-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(68,170,255,0.45); }
-  #gen-btn:active { transform: translateY(0); }
-  #gen-btn.loading { pointer-events: none; opacity: 0.7; }
-  #gen-btn::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.1);
-    transform: translateX(-100%);
-    transition: transform 0.3s;
+  #ar-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(0,255,80,0.4); }
+  #ar-btn.active {
+    background: linear-gradient(135deg, #7a1a1a, #f05);
+    box-shadow: 0 4px 20px rgba(255,0,80,0.35);
   }
-  #gen-btn:hover::after { transform: translateX(100%); }
 
   /* リセット */
   #reset-btn {
@@ -421,9 +412,20 @@
     </div>
   </div>
 
-  <button id="gen-btn">▶ 3D生成 / 更新</button>
+  <button id="ar-btn">📷 ARモード</button>
   <button id="reset-btn">↺ リセット</button>
 </div>
+
+<!-- AR用カメラ映像 -->
+<video id="ar-video" autoplay playsinline muted style="
+  display:none;
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:-1;
+"></video>
 
 <div id="status">フォント読み込み中…</div>
 
@@ -447,6 +449,13 @@ let matMode = 'standard';
 let clock;
 let animId;
 let autoUpdateTimer = null;
+
+// AR関連
+let arMode = false;
+let arStream = null;
+let gridHelper = null;
+let deviceAlpha = 0, deviceBeta = 0, deviceGamma = 0;
+let gyroEnabled = false;
 
 // ===== フォント定義（13種類 + ローカルNoto） =====
 const FONT_DEFS = {
@@ -473,6 +482,7 @@ function initThree() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
+  renderer.setClearColor(0x0a0a0f, 1); // 通常時は不透明
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a0f);
@@ -494,7 +504,7 @@ function initThree() {
   scene.add(rimLight);
 
   // グリッド背景
-  const gridHelper = new THREE.GridHelper(40, 40, 0x1a2030, 0x111820);
+  gridHelper = new THREE.GridHelper(40, 40, 0x1a2030, 0x111820);
   gridHelper.position.y = -2;
   scene.add(gridHelper);
 
@@ -567,6 +577,14 @@ function animate() {
         const s = 1 + Math.sin(t * 2.5) * 0.08;
         textGroup.scale.setScalar(s * parseFloat(document.getElementById('scale').value));
         break;
+    }
+
+    // ARモード中: ジャイロが有効なら3Dをカメラ方向に追従
+    if (arMode && gyroEnabled && animMode === 'none') {
+      const beta  = THREE.MathUtils.degToRad(deviceBeta  - 90); // 傾き(X)
+      const gamma = THREE.MathUtils.degToRad(deviceGamma);       // 左右(Y)
+      textGroup.rotation.x = beta  * 0.4;
+      textGroup.rotation.y = gamma * 0.6;
     }
   }
   renderer.render(scene, camera);
@@ -690,10 +708,6 @@ async function generate3DText() {
     return;
   }
 
-  const btn = document.getElementById('gen-btn');
-  btn.textContent = '生成中…';
-  btn.classList.add('loading');
-
   // 少し待ってからUIをブロックしないように
   await new Promise(r => setTimeout(r, 30));
 
@@ -782,9 +796,6 @@ async function generate3DText() {
     console.error(e);
     setStatus('⚠ 生成エラー: ' + e.message, 'err');
   }
-
-  btn.textContent = '▶ 3D生成 / 更新';
-  btn.classList.remove('loading');
 }
 
 // ===== マテリアル生成 =====
@@ -851,6 +862,82 @@ function createMaterials(colorFront, colorSide, mode) {
 }
 
 
+
+// ===== AR モード =====
+async function startAR() {
+  const btn = document.getElementById('ar-btn');
+  const video = document.getElementById('ar-video');
+
+  // iOS Safari: ジャイロ許可リクエスト
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const perm = await DeviceOrientationEvent.requestPermission();
+      gyroEnabled = perm === 'granted';
+    } catch(e) { gyroEnabled = false; }
+  } else {
+    gyroEnabled = true;
+  }
+
+  try {
+    // リアカメラ取得
+    arStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    video.srcObject = arStream;
+    video.style.display = 'block';
+
+    // Three.js をAR用に切替
+    scene.background = null;               // 透過
+    renderer.setClearColor(0x000000, 0);   // alpha=0
+    if (gridHelper) gridHelper.visible = false;
+
+    // ジャイロ登録
+    if (gyroEnabled) {
+      window.addEventListener('deviceorientation', onDeviceOrientation);
+    }
+
+    arMode = true;
+    btn.textContent = '⏹ AR終了';
+    btn.classList.add('active');
+    setStatus('📷 ARモード中 — デバイスを動かして位置を調整', 'ok');
+  } catch (e) {
+    setStatus(`⚠ カメラ起動失敗: ${e.message}`, 'err');
+  }
+}
+
+function stopAR() {
+  const btn = document.getElementById('ar-btn');
+  const video = document.getElementById('ar-video');
+
+  // カメラ停止
+  if (arStream) {
+    arStream.getTracks().forEach(t => t.stop());
+    arStream = null;
+  }
+  video.srcObject = null;
+  video.style.display = 'none';
+
+  // Three.jsを通常表示に戻す
+  scene.background = new THREE.Color(0x0a0a0f);
+  renderer.setClearColor(0x0a0a0f, 1);
+  if (gridHelper) gridHelper.visible = true;
+
+  // ジャイロ解除
+  window.removeEventListener('deviceorientation', onDeviceOrientation);
+
+  arMode = false;
+  btn.textContent = '📷 ARモード';
+  btn.classList.remove('active');
+  setStatus('ARモードを終了しました');
+}
+
+function onDeviceOrientation(e) {
+  deviceAlpha = e.alpha || 0;
+  deviceBeta  = e.beta  || 0;
+  deviceGamma = e.gamma || 0;
+}
 
 // ===== ステータス更新 =====
 function setStatus(msg, type = '') {
@@ -1001,10 +1088,9 @@ function setupUI() {
   document.getElementById('color-front').addEventListener('input', () => scheduleUpdate(300));
   document.getElementById('color-side').addEventListener('input', () => scheduleUpdate(300));
 
-  // 生成ボタン（手動でも押せる）
-  document.getElementById('gen-btn').addEventListener('click', () => {
-    if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
-    generate3DText();
+  // ARボタン
+  document.getElementById('ar-btn').addEventListener('click', () => {
+    arMode ? stopAR() : startAR();
   });
 
   // リセット
