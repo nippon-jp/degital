@@ -313,12 +313,7 @@
   <div class="field">
     <div class="field-label">フォント選択</div>
     <select id="font-select">
-      <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
-      <option value="notoserif">Noto Serif JP（明朝体）</option>
-      <option value="rocknroll">RocknRoll One（ポップ）</option>
-      <option value="dotgothic">DotGothic16（ドット）</option>
-      <option value="rampart">Rampart One（アウトライン）</option>
-      <option value="local">ローカルファイル（./fonts/）</option>
+      <option value="local">Noto Sans JP (NotoSansJP-VariableFont_wght.ttf)</option>
     </select>
     <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:4px;overflow:hidden;display:none;">
       <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s;"></div>
@@ -418,28 +413,28 @@ let autoUpdateTimer = null;
 // ===== フォント定義 =====
 const FONT_DEFS = {
   mplus1p: {
-    name: 'M PLUS 1p',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplus1p/MPLUS1p-Regular.ttf'
+    name: 'Noto Sans JP',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
   notoserif: {
-    name: 'Noto Serif JP',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoserif/NotoSerif-Regular.ttf'
+    name: 'Noto Sans JP',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
   rocknroll: {
-    name: 'RocknRoll One',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rocknrollone/RocknRollOne-Regular.ttf'
+    name: 'Noto Sans JP',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
   dotgothic: {
-    name: 'DotGothic16',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf'
+    name: 'Noto Sans JP',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
   rampart: {
-    name: 'Rampart One',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rampartone/RampartOne-Regular.ttf'
+    name: 'Noto Sans JP',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
   local: {
-    name: 'ローカル (./fonts/NotoSansJP-Regular.ttf)',
-    url: './fonts/NotoSansJP-Regular.ttf'
+    name: 'Noto Sans JP (ローカル)',
+    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
   },
 };
 
