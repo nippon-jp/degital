@@ -1,475 +1,971 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Text Studio - Auto-Update Edition</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #020617; color: #f8fafc; }
-        canvas { display: block; outline: none; }
-        
-        .inspector-panel {
-            background: rgba(15, 23, 42, 0.92);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-left: 1px solid rgba(255, 255, 255, 0.1);
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TEXT AR STUDIO - 日本語3D対応版</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --panel: rgba(15,15,25,0.92);
+    --border: rgba(100,180,255,0.18);
+    --accent: #4af;
+    --accent2: #f4a;
+    --text: #e8eaf0;
+    --sub: #6a7a9a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .ui-overlay { position: fixed; z-index: 100; pointer-events: none; }
-        .ui-overlay > * { pointer-events: auto; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+  }
 
-        @media (max-width: 767px) {
-            .inspector-panel {
-                bottom: 0; left: 0; width: 100%; border-left: none;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
-                max-height: 55vh; border-radius: 24px 24px 0 0;
-            }
-            .inspector-panel.minimized { transform: translateY(calc(100% - 60px)); }
-        }
+  /* THREE.js canvas */
+  #three-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
 
-        @media (min-width: 768px) {
-            .inspector-panel { top: 0; right: 0; width: 340px; height: 100vh; }
-            .inspector-panel.minimized { transform: translateX(340px); }
-        }
+  /* ローディング */
+  #loading {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    transition: opacity 0.6s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .loader-ring {
+    width: 52px; height: 52px;
+    border: 3px solid rgba(68,170,255,0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p { color: var(--sub); font-size: 13px; letter-spacing: 0.1em; }
 
-        input, select { background: #111827; color: white; border: 1px solid #374151; border-radius: 10px; padding: 12px; width: 100%; outline: none; font-size: 15px; }
-        input:focus { border-color: #6366f1; }
-        input[type="range"] { height: 8px; border-radius: 4px; appearance: none; background: #374151; }
-        input[type="range"]::-webkit-slider-thumb { appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #6366f1; cursor: pointer; border: 2px solid #fff; box-shadow: 0 0 10px rgba(99,102,241,0.5); }
+  /* コントロールパネル */
+  #panel {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 300px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    overflow-y: auto;
+    z-index: 10;
+    padding: 20px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    transition: transform 0.3s ease;
+  }
+  #panel::-webkit-scrollbar { width: 4px; }
+  #panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-        #ar-start-btn {
-            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-            z-index: 200; padding: 16px 40px;
-            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-            color: #fff; border-radius: 9999px; font-weight: 900;
-            text-transform: uppercase; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
-            display: none; border: none; width: 85%; max-width: 300px;
-        }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    text-transform: uppercase;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
 
-        .minimize-toggle { cursor: pointer; width: 100%; display: flex; flex-direction: column; align-items: center; padding: 12px 0; }
-        .handle-bar { width: 40px; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
+  .field-label {
+    font-size: 11px;
+    color: var(--sub);
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
 
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+  textarea, input[type=text], input[type=range], select {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    padding: 10px 12px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus, input[type=text]:focus, select:focus {
+    border-color: var(--accent);
+  }
+  textarea { resize: none; height: 80px; line-height: 1.6; }
 
-        #reopen-btn {
-            position: fixed; top: 24px; right: 24px; z-index: 110;
-            background: #6366f1; width: 48px; height: 48px; border-radius: 14px;
-            display: none; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-    </style>
+  input[type=range] {
+    padding: 0;
+    border: none;
+    background: transparent;
+    -webkit-appearance: none;
+    height: 4px;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    background: rgba(68,170,255,0.2);
+    border-radius: 4px;
+    height: 4px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-top: -6px;
+    box-shadow: 0 0 8px rgba(68,170,255,0.6);
+  }
+
+  .range-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .range-val {
+    font-size: 12px; color: var(--accent);
+    min-width: 36px; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* プリセットボタン */
+  .preset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .preset-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 8px 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .preset-btn:hover, .preset-btn.active {
+    background: rgba(68,170,255,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* カラー */
+  .color-row { display: flex; gap: 10px; }
+  .color-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  input[type=color] {
+    width: 100%; height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    cursor: pointer;
+    padding: 2px;
+  }
+
+  /* 生成ボタン */
+  #gen-btn {
+    background: linear-gradient(135deg, #1a6fff, #0af);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    padding: 14px;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(68,170,255,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  #gen-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(68,170,255,0.45); }
+  #gen-btn:active { transform: translateY(0); }
+  #gen-btn.loading { pointer-events: none; opacity: 0.7; }
+  #gen-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.1);
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+  }
+  #gen-btn:hover::after { transform: translateX(100%); }
+
+  /* リセット */
+  #reset-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--sub);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  #reset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ステータスバー */
+  #status {
+    position: fixed;
+    bottom: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15,15,25,0.85);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 8px 20px;
+    font-size: 12px;
+    color: var(--sub);
+    backdrop-filter: blur(16px);
+    z-index: 10;
+    letter-spacing: 0.08em;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  #status.ok { color: var(--accent); border-color: rgba(68,170,255,0.35); }
+  #status.err { color: #f66; border-color: rgba(255,100,100,0.35); }
+
+  /* パネル開閉（モバイル） */
+  #toggle-panel {
+    display: none;
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 20;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 20px;
+    width: 44px; height: 44px;
+    align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  @media (max-width: 640px) {
+    #panel { width: 100%; transform: translateX(100%); }
+    #panel.open { transform: translateX(0); }
+    #toggle-panel { display: flex; }
+  }
+
+  /* フォントエラー警告 */
+  #font-warn {
+    font-size: 11px;
+    color: #f96;
+    padding: 8px 10px;
+    background: rgba(255,150,80,0.08);
+    border: 1px solid rgba(255,150,80,0.2);
+    border-radius: 8px;
+    display: none;
+  }
+
+  /* ヘッダーロゴ */
+  #logo {
+    position: fixed;
+    top: 16px; left: 20px;
+    z-index: 10;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+</style>
 </head>
 <body>
 
-    <div id="loading" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center z-[300]">
-        <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p class="text-xs font-black tracking-widest text-slate-500 uppercase italic">リアルタイムエンジン起動中...</p>
+<div id="loading">
+  <div class="loader-ring"></div>
+  <p>エンジン起動中 / フォント読み込み中…</p>
+</div>
+
+<canvas id="three-canvas"></canvas>
+<div id="logo">TEXT AR STUDIO</div>
+
+<button id="toggle-panel">☰</button>
+
+<div id="panel">
+  <div class="panel-title">テキスト設定</div>
+
+  <div class="field">
+    <div class="field-label">テキスト（日本語・英数字対応）</div>
+    <textarea id="text-input" placeholder="日本語・English&#10;どちらも3D化できます">日本語</textarea>
+    <div id="font-warn">⚠ フォント読み込みに失敗しました。日本語が表示できない場合があります。</div>
+  </div>
+
+  <div class="panel-title">トランスフォーム</div>
+
+  <div class="field">
+    <div class="field-label">スケール</div>
+    <div class="range-row">
+      <input type="range" id="scale" min="0.2" max="3" step="0.05" value="1">
+      <span class="range-val" id="scale-val">1.0x</span>
     </div>
+  </div>
 
-    <div class="ui-overlay top-6 left-6 hidden md:block">
-        <h1 class="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter">TEXT AR STUDIO</h1>
-        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">リアルタイム・モデラー</p>
+  <div class="field">
+    <div class="field-label">厚み（押し出し深度）</div>
+    <div class="range-row">
+      <input type="range" id="depth" min="0.01" max="1" step="0.01" value="0.2">
+      <span class="range-val" id="depth-val">0.2</span>
     </div>
+  </div>
 
-    <button id="reopen-btn" onclick="toggleInspector()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
-    </button>
-
-    <button id="ar-start-btn" onclick="startAR()">ARを起動して配置する</button>
-    <div id="ar-status" class="fixed top-8 left-1/2 -translate-x-1/2 glass-panel px-8 py-3 rounded-full text-xs font-bold hidden z-[150] bg-indigo-600 border border-indigo-400 text-white shadow-2xl">床をスキャンしてください</div>
-
-    <div id="ui-container" class="inspector-panel ui-overlay flex flex-col">
-        <div class="minimize-toggle" onclick="toggleInspector()">
-            <div class="handle-bar"></div>
-            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest sm:hidden mt-2">スワイプで閉じる</span>
-        </div>
-        
-        <div id="panel-content" class="px-6 pb-10 overflow-y-auto custom-scroll flex-1 space-y-8">
-            <section class="space-y-4">
-                <h2 class="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>基本設定
-                </h2>
-                <div class="space-y-3">
-                    <input type="text" id="textInput" placeholder="文字を入力..." maxlength="15" value="TEXT AR" oninput="generateNew()">
-                    <select id="renderMode" onchange="generateNew()">
-                        <option value="board">パネル文字 (日本語対応)</option>
-                        <option value="geometry">3D立体文字 (英数字)</option>
-                    </select>
-                </div>
-            </section>
-
-            <section class="space-y-4">
-                <h2 class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>トランスフォーム（自動更新）
-                </h2>
-                <div class="space-y-4">
-                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
-                        <div class="flex justify-between mb-2">
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">スケール</span>
-                            <span id="scaleDisplay" class="text-[10px] font-mono text-indigo-400 font-bold">1.0x</span>
-                        </div>
-                        <input type="range" id="scaleRange" min="0.1" max="4" step="0.1" value="1" oninput="updateScale(this.value)">
-                    </div>
-                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
-                        <div class="flex justify-between mb-2">
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">厚み（奥行き）</span>
-                            <span id="depthDisplay" class="text-[10px] font-mono text-indigo-400 font-bold">0.2x</span>
-                        </div>
-                        <input type="range" id="depthRange" min="0.01" max="1.5" step="0.01" value="0.2" oninput="updateDepth(this.value)">
-                    </div>
-                </div>
-            </section>
-
-            <section class="space-y-4">
-                <h2 class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>マテリアル & アニメ
-                </h2>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">質感プリセット</label>
-                        <select id="stylePreset" onchange="applyPreset(this.value)">
-                            <option value="custom">標準</option>
-                            <option value="neon">ネオン（発光）</option>
-                            <option value="metal">メタル（反射）</option>
-                            <option value="glass">クリスタル（透過）</option>
-                        </select>
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">動作（アニメ）</label>
-                        <select id="animSelect" onchange="updateAnimation(this.value)">
-                            <option value="none">なし</option>
-                            <option value="rotate">回転</option>
-                            <option value="float">浮遊</option>
-                            <option value="pulse">脈動</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">表面の色</label>
-                        <input type="color" id="frontColorPicker" value="#ffffff" oninput="updateColors()" class="h-12 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-[9px] text-slate-400 uppercase font-bold">側面の色</label>
-                        <input type="color" id="sideColorPicker" value="#6366f1" oninput="updateColors()" class="h-12 cursor-pointer rounded-lg bg-slate-900 border-none w-full p-1">
-                    </div>
-                </div>
-            </section>
-
-            <button onclick="clearScene()" class="w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-700 text-slate-500 hover:text-rose-400 hover:border-rose-400 transition-all">
-                モデルをリセット
-            </button>
-        </div>
+  <div class="field">
+    <div class="field-label">ベベル（角の丸み）</div>
+    <div class="range-row">
+      <input type="range" id="bevel" min="0" max="0.08" step="0.002" value="0.02">
+      <span class="range-val" id="bevel-val">0.02</span>
     </div>
+  </div>
 
-    <script>
-        let scene, camera, renderer, controls, font;
-        let objects = [];
-        let selectedObject = null;
-        let isMinimizing = false;
-        const clock = new THREE.Clock();
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-        let reticle;
+  <div class="panel-title">マテリアル & アニメ</div>
 
-        const fontLoader = new THREE.FontLoader();
-        const fontUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/fonts/helvetiker_bold.typeface.json';
+  <div class="field">
+    <div class="field-label">質感プリセット</div>
+    <div class="preset-grid">
+      <button class="preset-btn active" data-mat="standard">標準</button>
+      <button class="preset-btn" data-mat="neon">ネオン（発光）</button>
+      <button class="preset-btn" data-mat="metal">メタル（反射）</button>
+      <button class="preset-btn" data-mat="crystal">クリスタル（透過）</button>
+    </div>
+  </div>
 
-        init();
-        animate();
+  <div class="field">
+    <div class="field-label">アニメーション</div>
+    <div class="preset-grid">
+      <button class="preset-btn active" data-anim="none">なし</button>
+      <button class="preset-btn" data-anim="rotate">回転</button>
+      <button class="preset-btn" data-anim="float">浮遊</button>
+      <button class="preset-btn" data-anim="pulse">脈動</button>
+    </div>
+  </div>
 
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020617);
+  <div class="field">
+    <div class="field-label">カラー</div>
+    <div class="color-row">
+      <div class="color-field">
+        <div class="field-label">表面</div>
+        <input type="color" id="color-front" value="#44aaff">
+      </div>
+      <div class="color-field">
+        <div class="field-label">側面</div>
+        <input type="color" id="color-side" value="#0033aa">
+      </div>
+    </div>
+  </div>
 
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
-            camera.position.set(1.5, 1.5, 1.5);
+  <button id="gen-btn">▶ 3D生成 / 更新</button>
+  <button id="reset-btn">↺ リセット</button>
+</div>
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
+<div id="status">フォント読み込み中…</div>
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.1;
-            controls.target.set(0, 0.3, 0);
+<!-- ライブラリ読み込み -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===== opentype.js CDN読み込み =====
+(function() {
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js';
+  document.head.appendChild(s);
+})();
+</script>
+<script>
+// ===== グローバル変数 =====
+let opentypeFont = null;
+let scene, camera, renderer, textGroup;
+let animMode = 'none';
+let matMode = 'standard';
+let clock;
+let animId;
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const pointLight = new THREE.PointLight(0xffffff, 1.5);
-            pointLight.position.set(5, 10, 5);
-            scene.add(pointLight);
+// ===== Three.js 初期化 =====
+function initThree() {
+  const canvas = document.getElementById('three-canvas');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
 
-            const grid = new THREE.GridHelper(10, 20, 0x1e293b, 0x0f172a);
-            grid.name = "grid";
-            scene.add(grid);
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0f);
 
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.8 })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
+  // カメラ
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
+  camera.position.set(0, 0, 5);
 
-            window.addEventListener('resize', onWindowResize);
-            
-            if ('xr' in navigator) {
-                navigator.xr.isSessionSupported('immersive-ar').then(supported => {
-                    if (supported) document.getElementById('ar-start-btn').style.display = 'block';
-                });
-            }
+  // ライト
+  const ambLight = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambLight);
 
-            fontLoader.load(fontUrl, (loadedFont) => {
-                font = loadedFont;
-                document.getElementById('loading').style.display = 'none';
-                generateNew();
-            }, undefined, () => {
-                document.getElementById('loading').style.display = 'none';
-                generateNew(); 
-            });
-        }
+  const dirLight = new THREE.DirectionalLight(0x88ccff, 1.2);
+  dirLight.position.set(3, 5, 5);
+  scene.add(dirLight);
 
-        function toggleInspector() {
-            const panel = document.getElementById('ui-container');
-            const reopenBtn = document.getElementById('reopen-btn');
-            isMinimizing = !isMinimizing;
-            if (isMinimizing) {
-                panel.classList.add('minimized');
-                if (window.innerWidth >= 768) reopenBtn.style.display = 'flex';
-            } else {
-                panel.classList.remove('minimized');
-                reopenBtn.style.display = 'none';
-            }
-        }
+  const rimLight = new THREE.DirectionalLight(0xff44aa, 0.6);
+  rimLight.position.set(-4, -2, -3);
+  scene.add(rimLight);
 
-        function fixGeometryPivot(geometry) {
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
-            const xOffset = - (bbox.max.x + bbox.min.x) / 2;
-            const yOffset = - bbox.min.y; 
-            const zOffset = - (bbox.max.z + bbox.min.z) / 2;
-            geometry.translate(xOffset, yOffset, zOffset);
-        }
+  // グリッド背景
+  const gridHelper = new THREE.GridHelper(40, 40, 0x1a2030, 0x111820);
+  gridHelper.position.y = -2;
+  scene.add(gridHelper);
 
-        function createTextGeometry(text, depth) {
-            const geo = new THREE.TextGeometry(text || "AR", {
-                font: font,
-                size: 0.3,
-                height: depth,
-                curveSegments: 12,
-                bevelEnabled: true,
-                bevelThickness: 0.02,
-                bevelSize: 0.01,
-                bevelOffset: 0,
-                bevelSegments: 5
-            });
-            fixGeometryPivot(geo);
-            return geo;
-        }
+  // テキストグループ
+  textGroup = new THREE.Group();
+  scene.add(textGroup);
 
-        function createBoardGeometry(text, depthValue) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 1024; canvas.height = 512;
-            ctx.clearRect(0,0,1024,512);
-            ctx.font = "Bold 160px 'Hiragino Sans', 'Meiryo', sans-serif";
-            ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.strokeStyle = "rgba(0,0,0,0.8)"; ctx.lineWidth = 20;
-            ctx.strokeText(text, 512, 256);
-            ctx.fillStyle = "white"; ctx.fillText(text, 512, 256);
-            
-            const tex = new THREE.CanvasTexture(canvas);
-            const frontMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
-            const sideMat = new THREE.MeshStandardMaterial({ color: document.getElementById('sideColorPicker').value });
-            
-            const textMetrics = ctx.measureText(text);
-            const textWidth = Math.max(0.6, (textMetrics.width / 400));
-            const geo = new THREE.BoxGeometry(textWidth, 0.5, depthValue);
-            fixGeometryPivot(geo);
-            return new THREE.Mesh(geo, [sideMat, sideMat, sideMat, sideMat, frontMat, sideMat]);
-        }
+  clock = new THREE.Clock();
 
-        function generateNew() {
-            // 現在のトランスフォームとアニメーションを保持
-            const oldPos = selectedObject ? selectedObject.position.clone() : new THREE.Vector3(0,0,0);
-            const oldRot = selectedObject ? selectedObject.rotation.clone() : new THREE.Euler(0,0,0);
-            
-            clearScene();
-            
-            const textStr = document.getElementById('textInput').value || "AR";
-            const modeInput = document.getElementById('renderMode').value;
-            const depth = parseFloat(document.getElementById('depthRange').value);
-            const isJapanese = /[^\x00-\x7F]/.test(textStr);
-            const actualMode = isJapanese ? 'board' : modeInput;
-            
-            if (isJapanese) document.getElementById('renderMode').value = 'board';
+  // リサイズ
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 
-            let mesh;
-            try {
-                if (actualMode === 'geometry' && font) {
-                    const geo = createTextGeometry(textStr, depth);
-                    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.2 });
-                    mesh = new THREE.Mesh(geo, mat);
-                } else {
-                    mesh = createBoardGeometry(textStr, depth);
-                }
+  // マウス/タッチでの簡易オービット
+  setupOrbit();
+  animate();
+}
 
-                mesh.userData.type = actualMode;
-                mesh.userData.animation = document.getElementById('animSelect').value;
-                mesh.userData.baseY = 0;
-                mesh.userData.savedScale = parseFloat(document.getElementById('scaleRange').value);
-                
-                mesh.position.copy(oldPos);
-                mesh.rotation.copy(oldRot);
-                mesh.scale.set(mesh.userData.savedScale, mesh.userData.savedScale, mesh.scale.z);
-                
-                scene.add(mesh);
-                objects.push(mesh);
-                selectedObject = mesh;
-                
-                // 他のリアルタイム項目も再適用
-                updateColors();
-                applyPreset(document.getElementById('stylePreset').value);
-            } catch (e) { console.error(e); }
-        }
+// ===== 簡易オービット =====
+function setupOrbit() {
+  let isDragging = false;
+  let prevX = 0, prevY = 0;
+  let rotX = 0.1, rotY = 0;
 
-        // --- 自動反映機能の実装 ---
+  const onStart = e => {
+    isDragging = true;
+    const p = e.touches ? e.touches[0] : e;
+    prevX = p.clientX; prevY = p.clientY;
+  };
+  const onMove = e => {
+    if (!isDragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    const dx = (p.clientX - prevX) * 0.008;
+    const dy = (p.clientY - prevY) * 0.008;
+    rotY += dx; rotX += dy;
+    rotX = Math.max(-1.2, Math.min(1.2, rotX));
+    if (textGroup && animMode === 'none') {
+      textGroup.rotation.y = rotY;
+      textGroup.rotation.x = rotX;
+    }
+    prevX = p.clientX; prevY = p.clientY;
+  };
+  const onEnd = () => { isDragging = false; };
 
-        function applyPreset(val) {
-            if (!selectedObject) return;
-            const mats = Array.isArray(selectedObject.material) ? selectedObject.material : [selectedObject.material];
-            mats.forEach(m => {
-                switch(val) {
-                    case 'neon': m.emissive.set(m.color); m.emissiveIntensity = 2.0; m.metalness = 0; m.roughness = 1; break;
-                    case 'metal': m.emissiveIntensity = 0; m.metalness = 1.0; m.roughness = 0.1; break;
-                    case 'glass': m.transparent = true; m.opacity = 0.5; m.metalness = 0.2; m.roughness = 0; break;
-                    default: m.emissiveIntensity = 0; m.opacity = 1.0; m.metalness = 0.5; m.roughness = 0.4;
-                }
-            });
-        }
+  renderer.domElement.addEventListener('mousedown', onStart);
+  renderer.domElement.addEventListener('mousemove', onMove);
+  renderer.domElement.addEventListener('mouseup', onEnd);
+  renderer.domElement.addEventListener('touchstart', onStart, { passive: true });
+  renderer.domElement.addEventListener('touchmove', onMove, { passive: true });
+  renderer.domElement.addEventListener('touchend', onEnd);
+}
 
-        function updateColors() {
-            if (!selectedObject) return;
-            const frontCol = document.getElementById('frontColorPicker').value;
-            const sideCol = document.getElementById('sideColorPicker').value;
-            if (Array.isArray(selectedObject.material)) {
-                selectedObject.material[4].color.set(frontCol);
-                [0,1,2,3,5].forEach(i => selectedObject.material[i].color.set(sideCol));
-            } else {
-                selectedObject.material.color.set(frontCol);
-            }
-        }
+// ===== アニメーションループ =====
+function animate() {
+  animId = requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
 
-        function updateDepth(val) {
-            document.getElementById('depthDisplay').innerText = val + 'x';
-            generateNew(); // 厚みはジオメトリを再構築
-        }
+  if (textGroup) {
+    switch(animMode) {
+      case 'rotate':
+        textGroup.rotation.y = t * 0.8;
+        break;
+      case 'float':
+        textGroup.position.y = Math.sin(t * 1.2) * 0.25;
+        break;
+      case 'pulse':
+        const s = 1 + Math.sin(t * 2.5) * 0.08;
+        textGroup.scale.setScalar(s * parseFloat(document.getElementById('scale').value));
+        break;
+    }
+  }
+  renderer.render(scene, camera);
+}
 
-        function updateScale(val) {
-            if (!selectedObject) return;
-            const s = parseFloat(val);
-            selectedObject.userData.savedScale = s;
-            selectedObject.scale.set(s, s, selectedObject.scale.z);
-            document.getElementById('scaleDisplay').innerText = s.toFixed(1) + 'x';
-        }
+// ===== opentype.js → Three.js Shapes変換 =====
+function opentypePathToThreeShapes(font, text, fontSize) {
+  const allShapes = [];
 
-        function updateAnimation(val) {
-            if (!selectedObject) return;
-            selectedObject.userData.animation = val;
-            if (val === 'none') {
-                selectedObject.rotation.set(0, 0, 0);
-                selectedObject.position.y = 0;
-            }
-        }
+  // 文字を1文字ずつ処理してX方向にレイアウト
+  let xOffset = 0;
+  const charSize = fontSize;
 
-        function clearScene() {
-            objects.forEach(o => {
-                if(o.geometry) o.geometry.dispose();
-                if(Array.isArray(o.material)) o.material.forEach(m => m.dispose());
-                else if(o.material) o.material.dispose();
-                scene.remove(o);
-            });
-            objects = [];
-            selectedObject = null;
-        }
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+    // 改行処理
+    if (char === '\n') {
+      xOffset = 0;
+      continue;
+    }
 
-        async function startAR() {
-            try {
-                const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test', 'local-floor'] });
-                renderer.xr.setReferenceSpaceType('local-floor');
-                await renderer.xr.setSession(session);
-                document.getElementById('ui-container').classList.add('minimized');
-                isMinimizing = true;
-                document.getElementById('ar-start-btn').style.display = 'none';
-                document.getElementById('ar-status').style.display = 'block';
-                scene.getObjectByName("grid").visible = false;
-                session.addEventListener('end', () => {
-                    document.getElementById('ui-container').classList.remove('minimized');
-                    isMinimizing = false;
-                    document.getElementById('ar-start-btn').style.display = 'block';
-                    document.getElementById('ar-status').style.display = 'none';
-                    scene.getObjectByName("grid").visible = true;
-                });
-                session.addEventListener('select', () => {
-                    if (reticle.visible && selectedObject) {
-                        const pos = new THREE.Vector3();
-                        reticle.matrix.decompose(pos, new THREE.Quaternion(), new THREE.Vector3());
-                        selectedObject.position.x = pos.x;
-                        selectedObject.position.z = pos.z;
-                        if (selectedObject.userData.animation === 'none') selectedObject.position.y = 0;
-                    }
-                });
-            } catch (e) { alert("ARを起動できませんでした。"); }
-        }
+    const glyphs = font.stringToGlyphs(char);
+    if (!glyphs || glyphs.length === 0) continue;
 
-        function animate() {
-            renderer.setAnimationLoop((timestamp, frame) => {
-                const time = clock.getElapsedTime();
-                if (selectedObject) {
-                    const anim = selectedObject.userData.animation;
-                    const baseS = selectedObject.userData.savedScale || 1.0;
-                    if (anim === 'rotate') selectedObject.rotation.y += 0.02;
-                    else if (anim === 'float') selectedObject.position.y = (Math.sin(time * 2) * 0.1 + 0.1) * selectedObject.scale.y;
-                    else if (anim === 'pulse') {
-                        const s = baseS + Math.sin(time * 5) * 0.1 * baseS;
-                        selectedObject.scale.set(s, s, selectedObject.scale.z);
-                    }
-                }
-                if (frame) {
-                    const session = renderer.xr.getSession();
-                    const rs = renderer.xr.getReferenceSpace();
-                    if (session && !hitTestSourceRequested) {
-                        session.requestReferenceSpace('viewer').then(ref => {
-                            session.requestHitTestSource({ space: ref }).then(s => hitTestSource = s);
-                        });
-                        hitTestSourceRequested = true;
-                    }
-                    if (hitTestSource) {
-                        const results = frame.getHitTestResults(hitTestSource);
-                        if (results.length) {
-                            reticle.visible = true;
-                            reticle.matrix.fromArray(results[0].getPose(rs).transform.matrix);
-                        } else { reticle.visible = false; }
-                    }
-                }
-                controls.update();
-                renderer.render(scene, camera);
-            });
-        }
-    </script>
+    for (const glyph of glyphs) {
+      if (!glyph.path || glyph.path.commands.length === 0) {
+        // スペース等
+        xOffset += (glyph.advanceWidth / font.unitsPerEm) * charSize;
+        continue;
+      }
+
+      // SVGパス文字列を取得
+      const svgPath = glyph.path.toSVG(1);
+      const shapes = svgPathToShapes(svgPath, font.unitsPerEm, charSize);
+
+      shapes.forEach(shape => {
+        // Y軸反転 + X方向オフセット
+        shape.curves.forEach(curve => {
+          transformPoints(curve, xOffset, font, charSize);
+        });
+        shape.getPoints().forEach(pt => {
+          pt.x += xOffset;
+          pt.y = -pt.y + charSize;
+        });
+
+        // Three.js Shapeを正しく再構築
+        const fixedShape = rebuildShape(glyph, font, charSize, xOffset);
+        if (fixedShape) allShapes.push(...fixedShape);
+      });
+
+      xOffset += (glyph.advanceWidth / font.unitsPerEm) * charSize;
+    }
+  }
+
+  return allShapes;
+}
+
+// ===== opentype glyph → Three.Shape（確実な変換） =====
+function glyphsToShapes(font, text, fontSize) {
+  const scale = fontSize / font.unitsPerEm;
+  const shapes = [];
+
+  // 全文字のパスを取得
+  const path = font.getPath(text, 0, 0, fontSize);
+  const commands = path.commands;
+
+  let currentShape = null;
+  let currentPath = null;
+
+  for (let i = 0; i < commands.length; i++) {
+    const cmd = commands[i];
+
+    if (cmd.type === 'M') {
+      // 新しい輪郭開始
+      currentShape = new THREE.Shape();
+      currentPath = currentShape;
+      currentShape.moveTo(cmd.x, -cmd.y); // Y軸反転
+      shapes.push(currentShape);
+
+    } else if (cmd.type === 'L') {
+      if (currentPath) currentPath.lineTo(cmd.x, -cmd.y);
+
+    } else if (cmd.type === 'C') {
+      if (currentPath) currentPath.bezierCurveTo(
+        cmd.x1, -cmd.y1,
+        cmd.x2, -cmd.y2,
+        cmd.x, -cmd.y
+      );
+
+    } else if (cmd.type === 'Q') {
+      if (currentPath) currentPath.quadraticCurveTo(
+        cmd.x1, -cmd.y1,
+        cmd.x, -cmd.y
+      );
+
+    } else if (cmd.type === 'Z') {
+      if (currentPath) currentPath.closePath();
+    }
+  }
+
+  // ホール検出（文字の内側の穴）
+  const resolvedShapes = resolveHoles(shapes);
+  return resolvedShapes;
+}
+
+// ===== ホール（穴）検出・解決 =====
+function resolveHoles(shapes) {
+  if (shapes.length <= 1) return shapes;
+
+  // 各シェイプの面積（符号付き）で外側・内側を判定
+  const result = [];
+  const areas = shapes.map(s => getShapeArea(s));
+
+  // 面積が正 → 外側輪郭、負 → 内側（ホール）
+  const outers = [];
+  const holes = [];
+
+  shapes.forEach((s, i) => {
+    if (areas[i] >= 0) outers.push(s);
+    else holes.push(s);
+  });
+
+  // ホールを最も近い外側シェイプに割り当て
+  outers.forEach(outer => {
+    const outerShape = new THREE.Shape(outer.getPoints());
+    holes.forEach(hole => {
+      // ホールをShapeのholes配列に追加
+      const holePath = new THREE.Path(hole.getPoints());
+      outerShape.holes.push(holePath);
+    });
+    result.push(outerShape);
+  });
+
+  return result.length > 0 ? result : shapes;
+}
+
+function getShapeArea(shape) {
+  const pts = shape.getPoints(12);
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y;
+    area -= pts[j].x * pts[i].y;
+  }
+  return area / 2;
+}
+
+// ===== メイン：テキスト3D生成 =====
+async function generate3DText() {
+  if (!opentypeFont) {
+    setStatus('フォントがまだ読み込まれていません…', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('gen-btn');
+  btn.textContent = '生成中…';
+  btn.classList.add('loading');
+
+  // 少し待ってからUIをブロックしないように
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    const text = document.getElementById('text-input').value || '日本語';
+    const scale = parseFloat(document.getElementById('scale').value);
+    const depth = parseFloat(document.getElementById('depth').value);
+    const bevel = parseFloat(document.getElementById('bevel').value);
+    const colorFront = document.getElementById('color-front').value;
+    const colorSide = document.getElementById('color-side').value;
+
+    // 既存テキストを削除
+    while (textGroup.children.length > 0) {
+      const child = textGroup.children[0];
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+      textGroup.remove(child);
+    }
+    textGroup.scale.setScalar(1);
+    textGroup.position.set(0, 0, 0);
+    textGroup.rotation.set(0, 0, 0);
+
+    // フォントサイズ（Three.js単位）
+    const fontSize = 1.0;
+
+    // opentype.js でシェイプ生成
+    const shapes = glyphsToShapes(opentypeFont, text, fontSize);
+
+    if (!shapes || shapes.length === 0) {
+      throw new Error('文字シェイプを生成できませんでした');
+    }
+
+    // ExtrudeGeometry で押し出し
+    const extrudeSettings = {
+      depth: depth * fontSize,
+      bevelEnabled: bevel > 0,
+      bevelThickness: bevel * fontSize,
+      bevelSize: bevel * fontSize * 0.5,
+      bevelSegments: 4,
+      curveSegments: 8,
+    };
+
+    // マテリアル作成
+    const materials = createMaterials(colorFront, colorSide, matMode);
+
+    // 全シェイプを一度に押し出し
+    const geometry = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox;
+
+    // 中央揃え
+    const cx = (bbox.max.x + bbox.min.x) / 2;
+    const cy = (bbox.max.y + bbox.min.y) / 2;
+    const cz = (bbox.max.z + bbox.min.z) / 2;
+    geometry.translate(-cx, -cy, -cz);
+
+    const mesh = new THREE.Mesh(geometry, materials);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    textGroup.add(mesh);
+
+    // スケール適用
+    textGroup.scale.setScalar(scale * 1.5);
+
+    setStatus('✓ 3D生成完了！ドラッグで回転できます', 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('⚠ 生成エラー: ' + e.message, 'err');
+  }
+
+  btn.textContent = '▶ 3D生成 / 更新';
+  btn.classList.remove('loading');
+}
+
+// ===== マテリアル生成 =====
+function createMaterials(colorFront, colorSide, mode) {
+  const fc = new THREE.Color(colorFront);
+  const sc = new THREE.Color(colorSide);
+
+  let frontMat, sideMat;
+
+  switch (mode) {
+    case 'neon':
+      frontMat = new THREE.MeshStandardMaterial({
+        color: fc, emissive: fc, emissiveIntensity: 0.8,
+        roughness: 0.2, metalness: 0.1,
+      });
+      sideMat = new THREE.MeshStandardMaterial({
+        color: sc, emissive: sc, emissiveIntensity: 0.5,
+        roughness: 0.3,
+      });
+      break;
+    case 'metal':
+      frontMat = new THREE.MeshStandardMaterial({
+        color: fc, roughness: 0.1, metalness: 0.9,
+        envMapIntensity: 1.0,
+      });
+      sideMat = new THREE.MeshStandardMaterial({
+        color: sc, roughness: 0.15, metalness: 0.85,
+      });
+      break;
+    case 'crystal':
+      frontMat = new THREE.MeshPhysicalMaterial({
+        color: fc, roughness: 0.0, metalness: 0.0,
+        transmission: 0.6, transparent: true, opacity: 0.7,
+        ior: 1.5,
+      });
+      sideMat = new THREE.MeshPhysicalMaterial({
+        color: sc, roughness: 0.0,
+        transmission: 0.4, transparent: true, opacity: 0.6,
+      });
+      break;
+    default: // standard
+      frontMat = new THREE.MeshStandardMaterial({
+        color: fc, roughness: 0.4, metalness: 0.3,
+      });
+      sideMat = new THREE.MeshStandardMaterial({
+        color: sc, roughness: 0.5, metalness: 0.2,
+      });
+  }
+
+  return [frontMat, sideMat];
+}
+
+// ===== ダミー関数（不要な参照エラー防止） =====
+function svgPathToShapes() { return []; }
+function transformPoints() {}
+function rebuildShape() { return null; }
+
+// ===== ステータス更新 =====
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+}
+
+// ===== フォント読み込み（Google Fonts API経由のOTF） =====
+async function loadFont() {
+  setStatus('フォント読み込み中…');
+
+  // 複数のフォールバックURLを試す
+  const fontUrls = [
+    // Noto Sans JP (サブセット・軽量版)
+    'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.woff2',
+    // M PLUS Rounded 1c (日本語対応・軽量)
+    'https://fonts.gstatic.com/s/mplusrounded1c/v15/VdGBAYIAV6gnpUpoWwNkYvrugw9RuM0q5AvkmQa1AA.woff2',
+  ];
+
+  // opentype.jsが読み込まれるまで待機
+  let retry = 0;
+  while (typeof opentype === 'undefined' && retry < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    retry++;
+  }
+
+  if (typeof opentype === 'undefined') {
+    document.getElementById('font-warn').style.display = 'block';
+    setStatus('⚠ opentype.js 読み込み失敗', 'err');
+    return false;
+  }
+
+  // OTF/TTFを直接フェッチして読み込む
+  // CORSの制限があるためGoogleのAPIを使用
+  const ttfUrl = 'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.woff2';
+
+  // woff2はopentype.jsで直接読めないため、別アプローチ
+  // Google Fonts CSS APIからフォントURLを取得
+  return await loadFontFallback();
+}
+
+async function loadFontFallback() {
+  // opentype.jsはTTF/OTFのバイナリを直接読む
+  // CORS対応しているフォントのみ使用可能
+
+  const candidates = [
+    {
+      name: 'Noto Sans 1p',
+      url: './fonts/NotoSansJP-Regular.ttf'
+    },
+    {
+      name: 'Noto Sans JP',
+      url: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-jp@4.5.12/files/noto-sans-jp-japanese-400-normal.woff2'
+    }
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      setStatus(`フォント読み込み中: ${candidate.name}…`);
+      const font = await new Promise((resolve, reject) => {
+        opentype.load(candidate.url, (err, font) => {
+          if (err) reject(err);
+          else resolve(font);
+        });
+      });
+      opentypeFont = font;
+      setStatus(`✓ ${candidate.name} 読み込み完了`, 'ok');
+      return true;
+    } catch (e) {
+      console.warn(`Failed to load ${candidate.name}:`, e);
+    }
+  }
+
+  // 最終フォールバック：jsDelivr経由
+  try {
+    setStatus('フォント読み込み中（代替）…');
+    const font = await new Promise((resolve, reject) => {
+      opentype.load(
+        'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/test/fonts/Roboto-Black.ttf',
+        (err, font) => { if (err) reject(err); else resolve(font); }
+      );
+    });
+    opentypeFont = font;
+    setStatus('ℹ 英字フォントで動作中（日本語フォントの読み込みに失敗）', '');
+    document.getElementById('font-warn').style.display = 'block';
+    return true;
+  } catch (e) {
+    document.getElementById('font-warn').style.display = 'block';
+    setStatus('⚠ フォント読み込み失敗', 'err');
+    return false;
+  }
+}
+
+// ===== UI イベント =====
+function setupUI() {
+  // スライダー
+  const sliders = [
+    { id: 'scale', valId: 'scale-val', suffix: 'x', decimals: 2 },
+    { id: 'depth', valId: 'depth-val', suffix: '', decimals: 2 },
+    { id: 'bevel', valId: 'bevel-val', suffix: '', decimals: 3 },
+  ];
+  sliders.forEach(({ id, valId, suffix, decimals }) => {
+    const el = document.getElementById(id);
+    const valEl = document.getElementById(valId);
+    el.addEventListener('input', () => {
+      valEl.textContent = parseFloat(el.value).toFixed(decimals) + suffix;
+    });
+  });
+
+  // マテリアルプリセット
+  document.querySelectorAll('[data-mat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-mat]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      matMode = btn.dataset.mat;
+    });
+  });
+
+  // アニメプリセット
+  document.querySelectorAll('[data-anim]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-anim]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      animMode = btn.dataset.anim;
+      if (animMode === 'none' && textGroup) {
+        textGroup.position.y = 0;
+        textGroup.scale.setScalar(parseFloat(document.getElementById('scale').value) * 1.5);
+      }
+    });
+  });
+
+  // 生成ボタン
+  document.getElementById('gen-btn').addEventListener('click', generate3DText);
+
+  // Enterキーでも生成（Shift+Enterで改行）
+  document.getElementById('text-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      generate3DText();
+    }
+  });
+
+  // リセット
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    while (textGroup.children.length > 0) {
+      textGroup.remove(textGroup.children[0]);
+    }
+    textGroup.rotation.set(0, 0, 0);
+    textGroup.position.set(0, 0, 0);
+    document.getElementById('text-input').value = '日本語';
+    setStatus('リセットしました');
+  });
+
+  // パネル開閉（モバイル）
+  document.getElementById('toggle-panel').addEventListener('click', () => {
+    document.getElementById('panel').classList.toggle('open');
+  });
+}
+
+// ===== 起動 =====
+async function main() {
+  initThree();
+  setupUI();
+
+  const ok = await loadFont();
+
+  // ローディング非表示
+  const loading = document.getElementById('loading');
+  loading.classList.add('hidden');
+  setTimeout(() => loading.style.display = 'none', 700);
+
+  if (ok && opentypeFont) {
+    // 初期テキストを自動生成
+    await generate3DText();
+  }
+}
+
+window.addEventListener('load', main);
+</script>
 </body>
 </html>
