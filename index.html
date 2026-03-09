@@ -336,7 +336,27 @@
   </div>
 
   <div class="field">
-    <div id="font-status-label" style="font-size:11px;color:var(--sub);padding:6px 0;"></div>
+    <div class="field-label">フォント選択</div>
+    <select id="font-select">
+      <option value="noto">Noto Sans JP（デフォルト・ローカル）</option>
+      <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
+      <option value="mplusrounded">M PLUS Rounded 1c（超丸ゴシック）</option>
+      <option value="zenkaku">Zen Kaku Gothic New（角ゴシック）</option>
+      <option value="zenold">Zen Old Mincho（オールド明朝）</option>
+      <option value="bizgothic">BIZ UDPGothic（UD角ゴシック）</option>
+      <option value="bizmincho">BIZ UDPMincho（UD明朝）</option>
+      <option value="dela">Dela Gothic One（極太デコ）</option>
+      <option value="rocknroll">RocknRoll One（ポップ）</option>
+      <option value="kaisei">Kaisei Decol（デコ明朝）</option>
+      <option value="hina">Hina Mincho（繊細明朝）</option>
+      <option value="rampart">Rampart One（アウトライン）</option>
+      <option value="dotgothic">DotGothic16（ドットゴシック）</option>
+      <option value="stick">Stick（棒体）</option>
+    </select>
+    <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:6px;overflow:hidden;display:none;">
+      <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.4s;"></div>
+    </div>
+    <div id="font-status-label" style="font-size:10px;color:var(--sub);margin-top:3px;"></div>
   </div>
 
   <div class="panel-title">トランスフォーム</div>
@@ -428,8 +448,23 @@ let clock;
 let animId;
 let autoUpdateTimer = null;
 
-// ===== フォントファイルパス =====
-const FONT_URL = './fonts/NotoSansJP-VariableFont_wght.ttf';
+// ===== フォント定義（13種類 + ローカルNoto） =====
+const FONT_DEFS = {
+  noto:        { name: 'Noto Sans JP',        url: './fonts/NotoSansJP-VariableFont_wght.ttf' },
+  mplus1p:     { name: 'M PLUS 1p',           url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplus1p/MPLUS1p-Regular.ttf' },
+  mplusrounded:{ name: 'M PLUS Rounded 1c',   url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-Regular.ttf' },
+  zenkaku:     { name: 'Zen Kaku Gothic New',  url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/zenkakugothicnew/ZenKakuGothicNew-Regular.ttf' },
+  zenold:      { name: 'Zen Old Mincho',       url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/zenoldmincho/ZenOldMincho-Regular.ttf' },
+  bizgothic:   { name: 'BIZ UDPGothic',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf' },
+  bizmincho:   { name: 'BIZ UDPMincho',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bizudpmincho/BIZUDPMincho-Regular.ttf' },
+  dela:        { name: 'Dela Gothic One',      url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/delagothicone/DelaGothicOne-Regular.ttf' },
+  rocknroll:   { name: 'RocknRoll One',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rocknrollone/RocknRollOne-Regular.ttf' },
+  kaisei:      { name: 'Kaisei Decol',         url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kaiseidecol/KaiseiDecol-Regular.ttf' },
+  hina:        { name: 'Hina Mincho',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hinamincho/HinaMincho-Regular.ttf' },
+  rampart:     { name: 'Rampart One',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rampartone/RampartOne-Regular.ttf' },
+  dotgothic:   { name: 'DotGothic16',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf' },
+  stick:       { name: 'Stick',                url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/stick/Stick-Regular.ttf' },
+};
 
 // ===== Three.js 初期化 =====
 function initThree() {
@@ -795,8 +830,10 @@ function setStatus(msg, type = '') {
   el.className = type;
 }
 
-// ===== フォント読み込み =====
-async function loadFont() {
+// ===== フォント読み込み（キャッシュ対応） =====
+async function loadFont(fontKey) {
+  fontKey = fontKey || 'noto';
+
   // opentype.js待機
   let retry = 0;
   while (typeof opentype === 'undefined' && retry < 50) {
@@ -809,30 +846,44 @@ async function loadFont() {
   }
 
   // キャッシュあれば即返す
-  if (fontCache['main']) {
-    opentypeFont = fontCache['main'];
+  if (fontCache[fontKey]) {
+    opentypeFont = fontCache[fontKey];
+    setFontStatus(`✓ ${FONT_DEFS[fontKey].name}`);
     return true;
   }
 
-  setFontStatus(`読み込み中… ${FONT_URL}`);
+  const def = FONT_DEFS[fontKey];
+  if (!def) {
+    setStatus(`⚠ 未定義のフォント: ${fontKey}`, 'err');
+    return false;
+  }
+
+  setFontStatus(`読み込み中… ${def.name}`);
   showFontProgress(20);
+  setStatus(`フォント読み込み中: ${def.name}`);
 
   try {
-    const res = await fetch(FONT_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${FONT_URL}`);
+    const res = await fetch(def.url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     showFontProgress(70);
     const buffer = await res.arrayBuffer();
     const font = opentype.parse(buffer);
-    fontCache['main'] = font;
+    fontCache[fontKey] = font;
     opentypeFont = font;
     showFontProgress(100);
-    setFontStatus(`✓ NotoSansJP-VariableFont_wght.ttf`);
-    setStatus('✓ フォント読み込み完了', 'ok');
+    setFontStatus(`✓ ${def.name}`);
+    setStatus(`✓ ${def.name} 読み込み完了`, 'ok');
     return true;
   } catch (e) {
     console.error('フォント読み込みエラー:', e);
-    setFontStatus(`⚠ 読み込み失敗: ${e.message}`);
-    setStatus(`⚠ フォント読み込み失敗: ${e.message}`, 'err');
+    // CDN失敗時、notoならローカルも試みる
+    if (fontKey === 'noto') {
+      setFontStatus(`⚠ 読み込み失敗: ${e.message}`);
+      setStatus(`⚠ フォント読み込み失敗`, 'err');
+    } else {
+      setFontStatus(`⚠ ${def.name} 失敗 — Noto Sans JPに切替中…`);
+      return await loadFont('noto');
+    }
     return false;
   }
 }
@@ -884,6 +935,14 @@ function setupUI() {
       if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
       generate3DText();
     }
+  });
+
+  // フォント切替
+  document.getElementById('font-select').addEventListener('change', async e => {
+    const key = e.target.value;
+    if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
+    const ok = await loadFont(key);
+    if (ok) generate3DText();
   });
 
   // マテリアルプリセット
@@ -943,7 +1002,8 @@ async function main() {
   setupUI();
 
   setStatus('フォント読み込み中…');
-  const ok = await loadFont();
+  const initKey = document.getElementById('font-select').value;
+  const ok = await loadFont(initKey);
 
   // ローディング非表示
   const loading = document.getElementById('loading');
