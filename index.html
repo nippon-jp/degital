@@ -330,7 +330,7 @@
 
   <div class="field">
     <div class="field-label">テキスト（日本語・英数字対応）</div>
-    <textarea id="text-input" placeholder="日本語・English&#10;どちらも3D化できます">日本語</textarea>
+    <textarea id="text-input" placeholder="日本語・English&#10;どちらも3D化できます">こんにちは</textarea>
     <div id="auto-update-hint" style="font-size:10px;color:var(--sub);text-align:right;margin-top:2px;">✦ 入力すると自動更新</div>
     <div id="font-warn">⚠ フォント読み込みに失敗しました。日本語が表示できない場合があります。</div>
   </div>
@@ -342,7 +342,7 @@
       <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
       <option value="mplusrounded">M PLUS Rounded 1c（超丸ゴシック）</option>
       <option value="zenkaku">Zen Kaku Gothic New（角ゴシック）</option>
-      <option value="zenold">Zen Old Mincho（オールド明朝）</option>
+      <option value="zenold" selected>Zen Old Mincho（オールド明朝）</option>
       <option value="bizgothic">BIZ UDPGothic（UD角ゴシック）</option>
       <option value="bizmincho">BIZ UDPMincho（UD明朝）</option>
       <option value="dela">Dela Gothic One（極太デコ）</option>
@@ -364,8 +364,8 @@
   <div class="field">
     <div class="field-label">スケール</div>
     <div class="range-row">
-      <input type="range" id="scale" min="0.2" max="3" step="0.05" value="1">
-      <span class="range-val" id="scale-val">1.0x</span>
+      <input type="range" id="scale" min="0.2" max="3" step="0.05" value="0.2">
+      <span class="range-val" id="scale-val">0.20x</span>
     </div>
   </div>
 
@@ -719,6 +719,22 @@ async function generate3DText() {
     textGroup.position.set(0, 0, 0);
     textGroup.rotation.set(0, 0, 0);
 
+    // メタル専用補助ライトの制御
+    if (!scene._metalLights) {
+      const ml1 = new THREE.PointLight(0xffffff, 0, 8);
+      ml1.position.set(2, 3, 3);
+      const ml2 = new THREE.PointLight(0xaaddff, 0, 8);
+      ml2.position.set(-3, -1, 2);
+      const ml3 = new THREE.PointLight(0xffeecc, 0, 6);
+      ml3.position.set(0, -3, 1);
+      scene.add(ml1, ml2, ml3);
+      scene._metalLights = [ml1, ml2, ml3];
+    }
+    const metalIntensities = [2.5, 1.8, 1.2];
+    scene._metalLights.forEach((l, i) => {
+      l.intensity = matMode === 'metal' ? metalIntensities[i] : 0;
+    });
+
     // フォントサイズ（Three.js単位）
     const fontSize = 1.0;
 
@@ -790,12 +806,25 @@ function createMaterials(colorFront, colorSide, mode) {
       });
       break;
     case 'metal':
-      frontMat = new THREE.MeshStandardMaterial({
-        color: fc, roughness: 0.1, metalness: 0.9,
-        envMapIntensity: 1.0,
+      frontMat = new THREE.MeshPhysicalMaterial({
+        color: fc,
+        roughness: 0.15,
+        metalness: 1.0,
+        reflectivity: 1.0,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.1,
+        emissive: fc,
+        emissiveIntensity: 0.12,
       });
-      sideMat = new THREE.MeshStandardMaterial({
-        color: sc, roughness: 0.15, metalness: 0.85,
+      sideMat = new THREE.MeshPhysicalMaterial({
+        color: sc,
+        roughness: 0.2,
+        metalness: 1.0,
+        reflectivity: 1.0,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.15,
+        emissive: sc,
+        emissiveIntensity: 0.08,
       });
       break;
     case 'crystal':
@@ -985,7 +1014,10 @@ function setupUI() {
     }
     textGroup.rotation.set(0, 0, 0);
     textGroup.position.set(0, 0, 0);
-    document.getElementById('text-input').value = '日本語';
+    document.getElementById('text-input').value = 'こんにちは';
+    document.getElementById('font-select').value = 'zenold';
+    document.getElementById('scale').value = '0.2';
+    document.getElementById('scale-val').textContent = '0.20x';
     setStatus('リセットしました');
     scheduleUpdate(300);
   });
