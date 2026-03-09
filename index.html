@@ -336,33 +336,7 @@
   </div>
 
   <div class="field">
-    <div class="field-label">ウェイト（太さ）選択</div>
-    <select id="font-select">
-      <option value="thin">Thin（極細）</option>
-      <option value="light">Light（細め）</option>
-      <option value="regular" selected>Regular（標準）</option>
-      <option value="medium">Medium（中太）</option>
-      <option value="bold">Bold（太字）</option>
-      <option value="black">Black（極太）</option>
-    </select>
-    <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:4px;overflow:hidden;display:none;">
-      <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s;"></div>
-    </div>
-    <div id="font-status-label" style="font-size:10px;color:var(--sub);margin-top:3px;"></div>
-  </div>
-
-  <div class="field">
-    <div class="field-label">フォントファイル読み込み</div>
-    <label id="font-drop" style="
-      display:flex; flex-direction:column; align-items:center; justify-content:center;
-      gap:6px; padding:14px 10px; border:1.5px dashed var(--border); border-radius:10px;
-      cursor:pointer; transition:all 0.2s; text-align:center;
-    ">
-      <span style="font-size:22px">📂</span>
-      <span style="font-size:11px; color:var(--sub);">TTFファイルをドロップ<br>またはクリックして選択</span>
-      <input type="file" id="font-file-input" accept=".ttf,.otf" style="display:none">
-    </label>
-    <div id="font-file-name" style="font-size:10px;color:var(--accent);margin-top:4px;text-align:center;"></div>
+    <div id="font-status-label" style="font-size:11px;color:var(--sub);padding:6px 0;"></div>
   </div>
 
   <div class="panel-title">トランスフォーム</div>
@@ -436,10 +410,10 @@
 <!-- ライブラリ読み込み -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ===== opentype.js CDN読み込み =====
+// ===== opentype.js CDN読み込み（最新版・Variable Font対応） =====
 (function() {
   const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js';
+  s.src = 'https://cdn.jsdelivr.net/npm/opentype.js@latest/dist/opentype.min.js';
   document.head.appendChild(s);
 })();
 </script>
@@ -454,16 +428,8 @@ let clock;
 let animId;
 let autoUpdateTimer = null;
 
-// ===== フォント定義（Base64埋め込み・サーバー不要） =====
-// ===== フォント定義 =====
-const FONT_DEFS = {
-  thin:    { name: 'Thin（極細）',    file: 'NotoSansJP-thin.ttf' },
-  light:   { name: 'Light（細め）',   file: 'NotoSansJP-light.ttf' },
-  regular: { name: 'Regular（標準）', file: 'NotoSansJP-regular.ttf' },
-  medium:  { name: 'Medium（中太）',  file: 'NotoSansJP-medium.ttf' },
-  bold:    { name: 'Bold（太字）',    file: 'NotoSansJP-bold.ttf' },
-  black:   { name: 'Black（極太）',   file: 'NotoSansJP-black.ttf' },
-};
+// ===== フォントファイルパス =====
+const FONT_URL = './fonts/NotoSansJP-VariableFont_wght.ttf';
 
 // ===== Three.js 初期化 =====
 function initThree() {
@@ -829,55 +795,8 @@ function setStatus(msg, type = '') {
   el.className = type;
 }
 
-// ===== フォント読み込み（Base64埋め込み対応） =====
-async function loadFont(fontKey) {
-  // opentype.jsが読み込まれるまで待機
-  let retry = 0;
-  while (typeof opentype === 'undefined' && retry < 50) {
-    await new Promise(r => setTimeout(r, 100));
-    retry++;
-  }
-  if (typeof opentype === 'undefined') {
-    setStatus('⚠ opentype.js 読み込み失敗', 'err');
-    return false;
-  }
-
-  const def = FONT_DEFS[fontKey] || FONT_DEFS['regular'];
-
-  // キャッシュがあれば即返す
-  if (fontCache[fontKey]) {
-    opentypeFont = fontCache[fontKey];
-    setFontStatus(`✓ ${def.name}`);
-    return true;
-  }
-
-  setFontStatus('読み込み中…');
-  showFontProgress(20);
-
-  // fetch で ./fonts/ から読み込み（GitHub Pages環境）
-  const url = `./fonts/${def.file}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showFontProgress(70);
-    const buffer = await res.arrayBuffer();
-    const font = opentype.parse(buffer);
-    fontCache[fontKey] = font;
-    opentypeFont = font;
-    showFontProgress(100);
-    setFontStatus(`✓ ${def.name}`);
-    setStatus(`✓ ${def.name} 読み込み完了`, 'ok');
-    return true;
-  } catch (e) {
-    // fetch失敗（ローカルfile://など）→ ドロップUIを促す
-    setFontStatus('⚠ 自動読み込み失敗 → 下のエリアにTTFをドロップしてください');
-    setStatus('📂 TTFファイルをドロップして読み込んでください', '');
-    return false;
-  }
-}
-
-// ===== ファイルドロップ/選択からフォント読み込み =====
-async function loadFontFromFile(file) {
+// ===== フォント読み込み =====
+async function loadFont() {
   // opentype.js待機
   let retry = 0;
   while (typeof opentype === 'undefined' && retry < 50) {
@@ -889,28 +808,31 @@ async function loadFontFromFile(file) {
     return false;
   }
 
-  setFontStatus(`読み込み中: ${file.name}`);
-  showFontProgress(30);
+  // キャッシュあれば即返す
+  if (fontCache['main']) {
+    opentypeFont = fontCache['main'];
+    return true;
+  }
+
+  setFontStatus(`読み込み中… ${FONT_URL}`);
+  showFontProgress(20);
 
   try {
-    const buffer = await file.arrayBuffer();
-    showFontProgress(80);
+    const res = await fetch(FONT_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${FONT_URL}`);
+    showFontProgress(70);
+    const buffer = await res.arrayBuffer();
     const font = opentype.parse(buffer);
+    fontCache['main'] = font;
     opentypeFont = font;
-
-    // 現在選択中のウェイトキーにキャッシュ
-    const key = document.getElementById('font-select').value;
-    fontCache[key] = font;
-
     showFontProgress(100);
-    setFontStatus(`✓ ${file.name}`);
-    document.getElementById('font-file-name').textContent = `✓ ${file.name}`;
-    setStatus(`✓ フォント読み込み完了`, 'ok');
-    scheduleUpdate(100);
+    setFontStatus(`✓ NotoSansJP-VariableFont_wght.ttf`);
+    setStatus('✓ フォント読み込み完了', 'ok');
     return true;
   } catch (e) {
-    setFontStatus('⚠ 読み込み失敗: ' + e.message);
-    setStatus('⚠ フォント読み込み失敗', 'err');
+    console.error('フォント読み込みエラー:', e);
+    setFontStatus(`⚠ 読み込み失敗: ${e.message}`);
+    setStatus(`⚠ フォント読み込み失敗: ${e.message}`, 'err');
     return false;
   }
 }
@@ -964,14 +886,6 @@ function setupUI() {
     }
   });
 
-  // フォント選択
-  document.getElementById('font-select').addEventListener('change', async (e) => {
-    const key = e.target.value;
-    setStatus(`フォント切替中: ${FONT_DEFS[key]?.name || key}…`);
-    const ok = await loadFont(key);
-    if (ok) scheduleUpdate(100);
-  });
-
   // マテリアルプリセット
   document.querySelectorAll('[data-mat]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1021,39 +935,6 @@ function setupUI() {
   document.getElementById('toggle-panel').addEventListener('click', () => {
     document.getElementById('panel').classList.toggle('open');
   });
-
-  // ===== フォントファイル ドロップ & クリック選択 =====
-  const dropArea = document.getElementById('font-drop');
-  const fileInput = document.getElementById('font-file-input');
-
-  // クリックでファイル選択
-  dropArea.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', e => {
-    if (e.target.files[0]) loadFontFromFile(e.target.files[0]);
-  });
-
-  // ドラッグオーバー
-  dropArea.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropArea.style.borderColor = 'var(--accent)';
-    dropArea.style.background = 'rgba(68,170,255,0.08)';
-  });
-  dropArea.addEventListener('dragleave', () => {
-    dropArea.style.borderColor = '';
-    dropArea.style.background = '';
-  });
-  // ドロップ
-  dropArea.addEventListener('drop', e => {
-    e.preventDefault();
-    dropArea.style.borderColor = '';
-    dropArea.style.background = '';
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.ttf') || file.name.endsWith('.otf'))) {
-      loadFontFromFile(file);
-    } else {
-      setStatus('⚠ TTFまたはOTFファイルをドロップしてください', 'err');
-    }
-  });
 }
 
 // ===== 起動 =====
@@ -1061,10 +942,8 @@ async function main() {
   initThree();
   setupUI();
 
-  // 初期フォントはセレクトの選択値で読み込む
-  const initKey = document.getElementById('font-select').value;
   setStatus('フォント読み込み中…');
-  const ok = await loadFont(initKey);
+  const ok = await loadFont();
 
   // ローディング非表示
   const loading = document.getElementById('loading');
