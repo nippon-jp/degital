@@ -111,6 +111,31 @@
   }
   textarea { resize: none; height: 80px; line-height: 1.6; }
 
+  select {
+    background: rgba(20, 25, 45, 0.95);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 36px 10px 12px;
+    width: 100%;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  select:focus { border-color: var(--accent); }
+  select option {
+    background: #0f1525;
+    color: var(--text);
+    padding: 8px;
+  }
+
   input[type=range] {
     padding: 0;
     border: none;
@@ -311,14 +336,14 @@
   </div>
 
   <div class="field">
-    <div class="field-label">フォント選択</div>
+    <div class="field-label">ウェイト（太さ）選択</div>
     <select id="font-select">
-      <option value="local" selected>Noto Sans JP（ローカル・推奨）</option>
-      <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
-      <option value="notoserif">Noto Serif JP（明朝体）</option>
-      <option value="rocknroll">RocknRoll One（ポップ）</option>
-      <option value="dotgothic">DotGothic16（ドット）</option>
-      <option value="rampart">Rampart One（アウトライン）</option>
+      <option value="thin">Thin（極細）</option>
+      <option value="light">Light（細め）</option>
+      <option value="regular" selected>Regular（標準）</option>
+      <option value="medium">Medium（中太）</option>
+      <option value="bold">Bold（太字）</option>
+      <option value="black">Black（極太）</option>
     </select>
     <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:4px;overflow:hidden;display:none;">
       <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s;"></div>
@@ -417,30 +442,12 @@ let autoUpdateTimer = null;
 
 // ===== フォント定義 =====
 const FONT_DEFS = {
-  local: {
-    name: 'Noto Sans JP（ローカル・推奨）',
-    url: './fonts/NotoSansJP-VariableFont_wght.ttf'
-  },
-  mplus1p: {
-    name: 'M PLUS 1p（丸ゴシック）',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplus1p/MPLUS1p-Regular.ttf'
-  },
-  notoserif: {
-    name: 'Noto Serif JP（明朝体）',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoserif/NotoSerif-Regular.ttf'
-  },
-  rocknroll: {
-    name: 'RocknRoll One（ポップ）',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rocknrollone/RocknRollOne-Regular.ttf'
-  },
-  dotgothic: {
-    name: 'DotGothic16（ドット）',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf'
-  },
-  rampart: {
-    name: 'Rampart One（アウトライン）',
-    url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rampartone/RampartOne-Regular.ttf'
-  },
+  thin:       { name: 'Noto Sans JP — Thin',       url: './fonts/NotoSansJP-Thin.ttf' },
+  light:      { name: 'Noto Sans JP — Light',      url: './fonts/NotoSansJP-Light.ttf' },
+  regular:    { name: 'Noto Sans JP — Regular',    url: './fonts/NotoSansJP-Regular.ttf' },
+  medium:     { name: 'Noto Sans JP — Medium',     url: './fonts/NotoSansJP-Medium.ttf' },
+  bold:       { name: 'Noto Sans JP — Bold',       url: './fonts/NotoSansJP-Bold.ttf' },
+  black:      { name: 'Noto Sans JP — Black',      url: './fonts/NotoSansJP-Black.ttf' },
 };
 
 // ===== Three.js 初期化 =====
