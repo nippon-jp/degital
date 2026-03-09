@@ -549,92 +549,15 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// ===== opentype glyph → Three.Shape（正確な変換） =====
-function glyphsToShapes(font, text, fontSize) {
-  // 全文字のパスコマンドを取得
-  const path = font.getPath(text, 0, 0, fontSize);
-  const commands = path.commands;
-
-  // Step1: Mコマンドで輪郭を分割し、各輪郭のコマンド列を収集
-  const contours = [];
-  let current = null;
-
-  for (const cmd of commands) {
-    if (cmd.type === 'M') {
-      current = [cmd];
-      contours.push(current);
-    } else if (current) {
-      current.push(cmd);
-    }
+// ===== opentype コマンド列 → 符号付き面積（Shoelace公式） =====
+function signedAreaFromCmds(cmds) {
+  // コマンドから頂点列を近似生成して面積計算
+  const pts = [];
+  for (const cmd of cmds) {
+    if (cmd.type === 'M' || cmd.type === 'L') pts.push({ x: cmd.x, y: cmd.y });
+    else if (cmd.type === 'C') pts.push({ x: cmd.x, y: cmd.y });
+    else if (cmd.type === 'Q') pts.push({ x: cmd.x, y: cmd.y });
   }
-
-  if (contours.length === 0) return [];
-
-  // Step2: 各輪郭をThree.js Pathに変換し、符号付き面積を計算
-  const paths = contours.map(cmds => {
-    const path2D = new THREE.Path();
-    for (const cmd of cmds) {
-      if      (cmd.type === 'M') path2D.moveTo(cmd.x, -cmd.y);
-      else if (cmd.type === 'L') path2D.lineTo(cmd.x, -cmd.y);
-      else if (cmd.type === 'C') path2D.bezierCurveTo(cmd.x1,-cmd.y1, cmd.x2,-cmd.y2, cmd.x,-cmd.y);
-      else if (cmd.type === 'Q') path2D.quadraticCurveTo(cmd.x1,-cmd.y1, cmd.x,-cmd.y);
-      else if (cmd.type === 'Z') path2D.closePath();
-    }
-    return path2D;
-  });
-
-  // Step3: 符号付き面積で外側輪郭(正)とホール(負)を判別
-  //        ※Y軸反転済みなので正が外側になる
-  const signed = paths.map(p => ({ path: p, area: signedArea(p) }));
-
-  // Step4: 面積の絶対値が大きい順にソート（外側が先に来るように）
-  signed.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
-
-  // Step5: 外側輪郭にホールを正しく割り当て
-  //        ホールの開始点が外側輪郭の内部にあるかで判定
-  const result = [];
-
-  for (const item of signed) {
-    if (item.area >= 0) {
-      // 外側輪郭 → Shapeとして追加
-      const shape = new THREE.Shape();
-      copyPathToShape(item.path, shape);
-      result.push(shape);
-    } else {
-      // ホール → 最も面積が小さい（最も近い）外側Shapeに割り当て
-      const holeStart = getPathStart(item.path);
-      let bestShape = null;
-      let bestArea = Infinity;
-
-      for (const shape of result) {
-        if (isPointInShape(holeStart, shape)) {
-          const sa = Math.abs(getShapeSignedArea(shape));
-          if (sa < bestArea) {
-            bestArea = sa;
-            bestShape = shape;
-          }
-        }
-      }
-
-      if (bestShape) {
-        const holePath = new THREE.Path();
-        copyPathToPath(item.path, holePath);
-        bestShape.holes.push(holePath);
-      } else if (result.length > 0) {
-        // 判定できなければ直前の外側Shapeに割り当て
-        const holePath = new THREE.Path();
-        copyPathToPath(item.path, holePath);
-        result[result.length - 1].holes.push(holePath);
-      }
-    }
-  }
-
-  return result;
-}
-
-// ===== 符号付き面積（Shoelace公式） =====
-function signedArea(path) {
-  const pts = path.getPoints(16);
   let area = 0;
   for (let i = 0; i < pts.length; i++) {
     const j = (i + 1) % pts.length;
@@ -644,55 +567,98 @@ function signedArea(path) {
   return area / 2;
 }
 
-function getShapeSignedArea(shape) {
-  const pts = shape.getPoints(16);
-  let area = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const j = (i + 1) % pts.length;
-    area += pts[i].x * pts[j].y;
-    area -= pts[j].x * pts[i].y;
+// ===== 点がポリゴン内部にあるか（Ray casting） =====
+function isPointInCmds(px, py, cmds) {
+  const pts = [];
+  for (const cmd of cmds) {
+    if (cmd.type === 'M' || cmd.type === 'L' || cmd.type === 'C' || cmd.type === 'Q') {
+      pts.push({ x: cmd.x, y: cmd.y });
+    }
   }
-  return area / 2;
-}
-
-// ===== Pathの開始点を取得 =====
-function getPathStart(path) {
-  const pts = path.getPoints(1);
-  return pts[0] || new THREE.Vector2(0, 0);
-}
-
-// ===== 点がShapeの内部にあるか（Ray casting） =====
-function isPointInShape(pt, shape) {
-  const pts = shape.getPoints(24);
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
     const xi = pts[i].x, yi = pts[i].y;
     const xj = pts[j].x, yj = pts[j].y;
-    if (((yi > pt.y) !== (yj > pt.y)) &&
-        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
       inside = !inside;
     }
   }
   return inside;
 }
 
-// ===== PathのコマンドをShape/Pathにコピー =====
-function copyPathToShape(src, dest) {
-  for (const curve of src.curves) {
-    dest.curves.push(curve);
+// ===== コマンド列をShapeまたはPathに書き込む =====
+function applyCommandsToPath(cmds, target) {
+  for (const cmd of cmds) {
+    if      (cmd.type === 'M') target.moveTo(cmd.x, -cmd.y);
+    else if (cmd.type === 'L') target.lineTo(cmd.x, -cmd.y);
+    else if (cmd.type === 'C') target.bezierCurveTo(cmd.x1,-cmd.y1, cmd.x2,-cmd.y2, cmd.x,-cmd.y);
+    else if (cmd.type === 'Q') target.quadraticCurveTo(cmd.x1,-cmd.y1, cmd.x,-cmd.y);
+    else if (cmd.type === 'Z') target.closePath();
   }
-  if (src.currentPoint) dest.currentPoint.copy(src.currentPoint);
 }
 
-function copyPathToPath(src, dest) {
-  for (const curve of src.curves) {
-    dest.curves.push(curve);
-  }
-  if (src.currentPoint) dest.currentPoint.copy(src.currentPoint);
-}
+// ===== opentype glyph → Three.Shape（正確な変換） =====
+function glyphsToShapes(font, text, fontSize) {
+  const path = font.getPath(text, 0, 0, fontSize);
+  const commands = path.commands;
 
-// ===== (後方互換ダミー) =====
-function getShapeArea(shape) { return Math.abs(getShapeSignedArea(shape)); }
+  // Step1: Mコマンドで輪郭ごとにコマンド列を分割
+  const contours = [];
+  let current = null;
+  for (const cmd of commands) {
+    if (cmd.type === 'M') { current = [cmd]; contours.push(current); }
+    else if (current) current.push(cmd);
+  }
+  if (contours.length === 0) return [];
+
+  // Step2: 各輪郭の符号付き面積を計算し分類
+  const items = contours.map(cmds => ({
+    cmds,
+    area: signedAreaFromCmds(cmds),
+    startX: cmds[0].x,
+    startY: cmds[0].y,
+  }));
+
+  // Step3: 面積絶対値の大きい順にソート（外側輪郭が先）
+  items.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+
+  // Step4: 外側(正面積)をShape、内側(負面積)をholeとして割り当て
+  // ※フォントによって巻き方向が異なるので、絶対値最大=外側として扱う
+  const shapes = [];
+
+  // 最初の輪郭は必ず外側として扱い、以降はray castingで判定
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const absArea = Math.abs(item.area);
+
+    // 外側輪郭かどうか：まだどの外側Shapeにも含まれていないもの
+    let parentShape = null;
+    for (const s of shapes) {
+      if (isPointInCmds(item.startX, item.startY, s._cmds)) {
+        parentShape = s;
+        break;
+      }
+    }
+
+    if (parentShape === null) {
+      // 外側輪郭 → 新しいShape
+      const shape = new THREE.Shape();
+      applyCommandsToPath(item.cmds, shape);
+      shape._cmds = item.cmds; // 内外判定用に保持
+      shapes.push(shape);
+    } else {
+      // ホール → 親Shapeに追加
+      const hole = new THREE.Path();
+      applyCommandsToPath(item.cmds, hole);
+      parentShape.holes.push(hole);
+    }
+  }
+
+  // _cmdsプロパティを削除（Three.jsに渡す前にクリーン）
+  shapes.forEach(s => delete s._cmds);
+
+  return shapes;
+}
 
 // ===== メイン：テキスト3D生成 =====
 async function generate3DText() {
