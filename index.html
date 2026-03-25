@@ -2,18 +2,18 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>TEXT AR STUDIO - 日本語3D対応版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>TEXT AR STUDIO - 自動起動強化版</title>
 <style>
   :root {
     --bg: #0a0a0f;
-    --panel: rgba(15,15,25,0.92);
-    --border: rgba(100,180,255,0.18);
+    --panel: rgba(10, 10, 20, 0.85);
+    --border: rgba(100, 180, 255, 0.25);
     --accent: #4af;
-    --accent2: #f4a;
+    --accent-glow: rgba(68, 170, 255, 0.5);
     --text: #e8eaf0;
-    --sub: #6a7a9a;
-    --radius: 14px;
+    --sub: #94a3b8;
+    --radius: 16px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -26,15 +26,27 @@
     width: 100vw;
   }
 
-  /* THREE.js canvas */
   #three-canvas {
     position: fixed;
     inset: 0;
-    z-index: 0;
+    z-index: 1;
+    pointer-events: auto;
   }
 
-  /* ローディング */
-  #loading {
+  /* ARビデオ背景 */
+  #ar-video {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    display: none;
+    background: #000;
+  }
+
+  /* ローディング兼スタート画面 */
+  #overlay {
     position: fixed;
     inset: 0;
     z-index: 100;
@@ -43,1093 +55,516 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 18px;
-    transition: opacity 0.6s;
+    gap: 24px;
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  #loading.hidden { opacity: 0; pointer-events: none; }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+
   .loader-ring {
-    width: 52px; height: 52px;
-    border: 3px solid rgba(68,170,255,0.15);
+    width: 60px; height: 60px;
+    border: 3px solid rgba(68,170,255,0.1);
     border-top-color: var(--accent);
     border-radius: 50%;
-    animation: spin 0.9s linear infinite;
+    animation: spin 1s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loading p { color: var(--sub); font-size: 13px; letter-spacing: 0.1em; }
+
+  #start-btn {
+    display: none; /* 読み込み完了後に表示 */
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    color: white;
+    border: none;
+    padding: 18px 48px;
+    border-radius: 40px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 20px var(--accent-glow);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 20px var(--accent-glow); }
+    50% { transform: scale(1.05); box-shadow: 0 0 40px var(--accent-glow); }
+    100% { transform: scale(1); box-shadow: 0 0 20px var(--accent-glow); }
+  }
 
   /* コントロールパネル */
   #panel {
     position: fixed;
-    right: 0; top: 0; bottom: 0;
-    width: 300px;
+    right: 16px; top: 16px; bottom: 16px;
+    width: 320px;
     background: var(--panel);
-    border-left: 1px solid var(--border);
-    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(24px);
     overflow-y: auto;
     z-index: 10;
-    padding: 20px 16px 40px;
+    padding: 24px;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    transition: transform 0.3s ease;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+    transform: translateX(calc(100% + 32px));
   }
-  #panel::-webkit-scrollbar { width: 4px; }
-  #panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  #panel.open { transform: translateX(0); }
 
   .panel-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    color: var(--accent);
-    text-transform: uppercase;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .field-label {
-    font-size: 11px;
-    color: var(--sub);
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
-  }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-
-  textarea, input[type=text], input[type=range], select {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 15px;
-    font-family: inherit;
-    padding: 10px 12px;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  textarea:focus, input[type=text]:focus, select:focus {
-    border-color: var(--accent);
-  }
-  textarea { resize: none; height: 80px; line-height: 1.6; }
-
-  select {
-    background: rgba(20, 25, 45, 0.95);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 36px 10px 12px;
-    width: 100%;
-    font-size: 13px;
-    font-family: inherit;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  select:focus { border-color: var(--accent); }
-  select option {
-    background: #0f1525;
-    color: var(--text);
-    padding: 8px;
-  }
-
-  input[type=range] {
-    padding: 0;
-    border: none;
-    background: transparent;
-    -webkit-appearance: none;
-    height: 4px;
-    cursor: pointer;
-  }
-  input[type=range]::-webkit-slider-runnable-track {
-    background: rgba(68,170,255,0.2);
-    border-radius: 4px;
-    height: 4px;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px; height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    margin-top: -6px;
-    box-shadow: 0 0 8px rgba(68,170,255,0.6);
-  }
-
-  .range-row {
-    display: flex; align-items: center; gap: 8px;
-  }
-  .range-val {
-    font-size: 12px; color: var(--accent);
-    min-width: 36px; text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* プリセットボタン */
-  .preset-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-  .preset-btn {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
     font-size: 12px;
-    padding: 8px 6px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.15s;
-    font-family: inherit;
-  }
-  .preset-btn:hover, .preset-btn.active {
-    background: rgba(68,170,255,0.12);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  /* カラー */
-  .color-row { display: flex; gap: 10px; }
-  .color-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-  input[type=color] {
-    width: 100%; height: 36px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.04);
-    cursor: pointer;
-    padding: 2px;
-  }
-
-  /* ARボタン */
-  #ar-btn {
-    background: linear-gradient(135deg, #1a7a3f, #0f5);
-    border: none;
-    border-radius: 10px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 700;
-    font-family: inherit;
-    padding: 14px;
-    cursor: pointer;
-    letter-spacing: 0.06em;
-    transition: all 0.2s;
-    box-shadow: 0 4px 20px rgba(0,255,80,0.25);
-  }
-  #ar-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(0,255,80,0.4); }
-  #ar-btn.active {
-    background: linear-gradient(135deg, #7a1a1a, #f05);
-    box-shadow: 0 4px 20px rgba(255,0,80,0.35);
-  }
-
-  /* リセット */
-  #reset-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--sub);
-    font-size: 13px;
-    font-family: inherit;
-    padding: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  #reset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-
-  /* ステータスバー */
-  #status {
-    position: fixed;
-    bottom: 16px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(15,15,25,0.85);
-    border: 1px solid var(--border);
-    border-radius: 30px;
-    padding: 8px 20px;
-    font-size: 12px;
-    color: var(--sub);
-    backdrop-filter: blur(16px);
-    z-index: 10;
-    letter-spacing: 0.08em;
-    transition: all 0.3s;
-    white-space: nowrap;
-  }
-  #status.ok { color: var(--accent); border-color: rgba(68,170,255,0.35); }
-  #status.err { color: #f66; border-color: rgba(255,100,100,0.35); }
-
-  /* パネル開閉（モバイル） */
-  #toggle-panel {
-    display: none;
-    position: fixed;
-    top: 16px; right: 16px;
-    z-index: 20;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 20px;
-    width: 44px; height: 44px;
-    align-items: center; justify-content: center;
-    cursor: pointer;
-  }
-  @media (max-width: 640px) {
-    #panel { width: 100%; transform: translateX(100%); }
-    #panel.open { transform: translateX(0); }
-    #toggle-panel { display: flex; }
-  }
-
-  /* フォントエラー警告 */
-  #font-warn {
-    font-size: 11px;
-    color: #f96;
-    padding: 8px 10px;
-    background: rgba(255,150,80,0.08);
-    border: 1px solid rgba(255,150,80,0.2);
-    border-radius: 8px;
-    display: none;
-  }
-
-  /* ヘッダーロゴ */
-  #logo {
-    position: fixed;
-    top: 16px; left: 20px;
-    z-index: 10;
-    font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.2em;
     color: var(--accent);
     text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+
+  .field-label { font-size: 11px; color: var(--sub); margin-bottom: 8px; display: block; }
+
+  textarea, select, input[type=range] {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px;
+    font-family: inherit;
+    outline: none;
+  }
+  textarea { height: 70px; resize: none; }
+
+  /* ARトグル */
+  #toggle-panel {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    width: 56px; height: 56px;
+    background: var(--accent);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 24px;
+    z-index: 20;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #status {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 12px;
+    z-index: 5;
     pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  @media (max-width: 640px) {
+    #panel { width: calc(100% - 32px); left: 16px; right: 16px; }
   }
 </style>
 </head>
 <body>
 
-<div id="loading">
-  <div class="loader-ring"></div>
-  <p>エンジン起動中 / フォント読み込み中…</p>
+<!-- カメラ背景 -->
+<video id="ar-video" autoplay playsinline muted></video>
+
+<!-- 初期オーバーレイ（自動起動のためのユーザーアクション待ち） -->
+<div id="overlay">
+  <div id="loader-content">
+    <div class="loader-ring"></div>
+    <p style="margin-top:16px; font-size:14px; color:var(--sub)">LOADING ENGINE...</p>
+  </div>
+  <button id="start-btn">EXPERIENCE AR</button>
+  <p id="start-hint" style="display:none; font-size:12px; color:var(--sub)">タップしてARカメラとセンサーを起動</p>
 </div>
 
 <canvas id="three-canvas"></canvas>
-<div id="logo">TEXT AR STUDIO</div>
 
-<button id="toggle-panel">☰</button>
+<button id="toggle-panel">⚙</button>
 
 <div id="panel">
-  <div class="panel-title">テキスト設定</div>
-
+  <div class="panel-title">TEXT SETTINGS</div>
+  
   <div class="field">
-    <div class="field-label">テキスト（日本語・英数字対応）</div>
-    <textarea id="text-input" placeholder="日本語・English&#10;どちらも3D化できます">こんにちは</textarea>
-    <div id="auto-update-hint" style="font-size:10px;color:var(--sub);text-align:right;margin-top:2px;">✦ 入力すると自動更新</div>
-    <div id="font-warn">⚠ フォント読み込みに失敗しました。日本語が表示できない場合があります。</div>
+    <label class="field-label">表示テキスト</label>
+    <textarea id="text-input">HELLO AR</textarea>
   </div>
 
   <div class="field">
-    <div class="field-label">フォント選択</div>
+    <label class="field-label">フォント</label>
     <select id="font-select">
-      <option value="noto">Noto Sans JP（デフォルト・ローカル）</option>
-      <option value="mplus1p">M PLUS 1p（丸ゴシック）</option>
-      <option value="mplusrounded">M PLUS Rounded 1c（超丸ゴシック）</option>
-      <option value="zenkaku">Zen Kaku Gothic New（角ゴシック）</option>
-      <option value="zenold" selected>Zen Old Mincho（オールド明朝）</option>
-      <option value="bizgothic">BIZ UDPGothic（UD角ゴシック）</option>
-      <option value="bizmincho">BIZ UDPMincho（UD明朝）</option>
-      <option value="dela">Dela Gothic One（極太デコ）</option>
-      <option value="rocknroll">RocknRoll One（ポップ）</option>
-      <option value="kaisei">Kaisei Decol（デコ明朝）</option>
-      <option value="hina">Hina Mincho（繊細明朝）</option>
-      <option value="rampart">Rampart One（アウトライン）</option>
-      <option value="dotgothic">DotGothic16（ドットゴシック）</option>
-      <option value="stick">Stick（棒体）</option>
+      <option value="zenold" selected>Zen Old Mincho (明朝)</option>
+      <option value="dela">Dela Gothic One (極太)</option>
+      <option value="dotgothic">DotGothic16 (ドット)</option>
+      <option value="mplusrounded">M PLUS Rounded (丸ゴ)</option>
     </select>
-    <div id="font-loading-bar" style="height:3px;background:rgba(68,170,255,0.15);border-radius:3px;margin-top:6px;overflow:hidden;display:none;">
-      <div id="font-loading-progress" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.4s;"></div>
-    </div>
-    <div id="font-status-label" style="font-size:10px;color:var(--sub);margin-top:3px;"></div>
   </div>
 
-  <div class="panel-title">トランスフォーム</div>
-
+  <div class="panel-title">TRANSFORM</div>
+  
   <div class="field">
-    <div class="field-label">スケール</div>
-    <div class="range-row">
-      <input type="range" id="scale" min="0.2" max="3" step="0.05" value="0.2">
-      <span class="range-val" id="scale-val">0.20x</span>
-    </div>
+    <label class="field-label">スケール</label>
+    <input type="range" id="scale" min="0.05" max="1" step="0.01" value="0.15">
   </div>
 
-  <div class="field">
-    <div class="field-label">厚み（押し出し深度）</div>
-    <div class="range-row">
-      <input type="range" id="depth" min="0.01" max="1" step="0.01" value="0.2">
-      <span class="range-val" id="depth-val">0.2</span>
-    </div>
-  </div>
+  <div class="panel-title">STYLE & ANIMATION</div>
 
   <div class="field">
-    <div class="field-label">ベベル（角の丸み）</div>
-    <div class="range-row">
-      <input type="range" id="bevel" min="0" max="0.08" step="0.002" value="0.02">
-      <span class="range-val" id="bevel-val">0.02</span>
-    </div>
-  </div>
-
-  <div class="panel-title">マテリアル & アニメ</div>
-
-  <div class="field">
-    <div class="field-label">質感プリセット</div>
+    <label class="field-label">質感</label>
     <div class="preset-grid">
-      <button class="preset-btn active" data-mat="standard">標準</button>
-      <button class="preset-btn" data-mat="neon">ネオン（発光）</button>
-      <button class="preset-btn" data-mat="metal">メタル（反射）</button>
-      <button class="preset-btn" data-mat="crystal">クリスタル（透過）</button>
+      <button class="btn active" data-mat="neon">NEON</button>
+      <button class="btn" data-mat="metal">METAL</button>
+      <button class="btn" data-mat="crystal">GLASS</button>
+      <button class="btn" data-mat="standard">BASIC</button>
     </div>
   </div>
 
   <div class="field">
-    <div class="field-label">アニメーション</div>
+    <label class="field-label">アニメーション</label>
     <div class="preset-grid">
-      <button class="preset-btn active" data-anim="none">なし</button>
-      <button class="preset-btn" data-anim="rotate">回転</button>
-      <button class="preset-btn" data-anim="float">浮遊</button>
-      <button class="preset-btn" data-anim="pulse">脈動</button>
+      <button class="btn active" data-anim="rotate">ROTATE</button>
+      <button class="btn" data-anim="float">FLOAT</button>
+      <button class="btn" data-anim="pulse">PULSE</button>
+      <button class="btn" data-anim="none">NONE</button>
     </div>
   </div>
 
   <div class="field">
-    <div class="field-label">カラー</div>
-    <div class="color-row">
-      <div class="color-field">
-        <div class="field-label">表面</div>
-        <input type="color" id="color-front" value="#44aaff">
-      </div>
-      <div class="color-field">
-        <div class="field-label">側面</div>
-        <input type="color" id="color-side" value="#0033aa">
-      </div>
-    </div>
+    <label class="field-label">メインカラー</label>
+    <input type="color" id="color-front" value="#00ffff" style="height:40px; border:none; padding:2px;">
   </div>
-
-  <button id="ar-btn">📷 ARモード</button>
-  <button id="reset-btn">↺ リセット</button>
 </div>
 
-<!-- AR用カメラ映像 -->
-<video id="ar-video" autoplay playsinline muted style="
-  display:none;
-  position:fixed;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  z-index:-1;
-"></video>
+<div id="status">Ready</div>
 
-<div id="status">フォント読み込み中…</div>
-
-<!-- ライブラリ読み込み -->
+<!-- Libraries -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@latest/dist/opentype.min.js"></script>
+
 <script>
-// ===== opentype.js CDN読み込み（最新版・Variable Font対応） =====
-(function() {
-  const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/opentype.js@latest/dist/opentype.min.js';
-  document.head.appendChild(s);
-})();
-</script>
-<script>
-// ===== グローバル変数 =====
+/**
+ * TEXT AR STUDIO - CORE LOGIC
+ */
+let scene, camera, renderer, textGroup;
 let opentypeFont = null;
 let fontCache = {};
-let scene, camera, renderer, textGroup;
-let animMode = 'none';
-let matMode = 'standard';
-let clock;
-let animId;
-let autoUpdateTimer = null;
-
-// AR関連
-let arMode = false;
 let arStream = null;
-let gridHelper = null;
-let deviceAlpha = 0, deviceBeta = 0, deviceGamma = 0;
-let gyroEnabled = false;
+let clock = new THREE.Clock();
+let animMode = 'rotate';
+let matMode = 'neon';
+let gyro = { alpha: 0, beta: 0, gamma: 0 };
+let isGyroEnabled = false;
 
-// ===== フォント定義（13種類 + ローカルNoto） =====
+// フォントURL定義
 const FONT_DEFS = {
-  noto:        { name: 'Noto Sans JP',        url: './fonts/NotoSansJP-VariableFont_wght.ttf' },
-  mplus1p:     { name: 'M PLUS 1p',           url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplus1p/MPLUS1p-Regular.ttf' },
-  mplusrounded:{ name: 'M PLUS Rounded 1c',   url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-Regular.ttf' },
-  zenkaku:     { name: 'Zen Kaku Gothic New',  url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/zenkakugothicnew/ZenKakuGothicNew-Regular.ttf' },
-  zenold:      { name: 'Zen Old Mincho',       url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/zenoldmincho/ZenOldMincho-Regular.ttf' },
-  bizgothic:   { name: 'BIZ UDPGothic',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf' },
-  bizmincho:   { name: 'BIZ UDPMincho',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bizudpmincho/BIZUDPMincho-Regular.ttf' },
-  dela:        { name: 'Dela Gothic One',      url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/delagothicone/DelaGothicOne-Regular.ttf' },
-  rocknroll:   { name: 'RocknRoll One',        url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rocknrollone/RocknRollOne-Regular.ttf' },
-  kaisei:      { name: 'Kaisei Decol',         url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kaiseidecol/KaiseiDecol-Regular.ttf' },
-  hina:        { name: 'Hina Mincho',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hinamincho/HinaMincho-Regular.ttf' },
-  rampart:     { name: 'Rampart One',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rampartone/RampartOne-Regular.ttf' },
-  dotgothic:   { name: 'DotGothic16',          url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf' },
-  stick:       { name: 'Stick',                url: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/stick/Stick-Regular.ttf' },
+  zenold: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/zenoldmincho/ZenOldMincho-Regular.ttf',
+  dela: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/delagothicone/DelaGothicOne-Regular.ttf',
+  dotgothic: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dotgothic16/DotGothic16-Regular.ttf',
+  mplusrounded: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-Regular.ttf'
 };
 
-// ===== Three.js 初期化 =====
-function initThree() {
+/**
+ * 初期化：Three.js
+ */
+function initEngine() {
   const canvas = document.getElementById('three-canvas');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.setClearColor(0x0a0a0f, 1); // 通常時は不透明
+  renderer.setClearColor(0x000000, 0); // 常に透過
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a0f);
+  
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+  camera.position.set(0, 0, 2);
 
-  // カメラ
-  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
-  camera.position.set(0, 0, 5);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
 
-  // ライト
-  const ambLight = new THREE.AmbientLight(0xffffff, 0.4);
-  scene.add(ambLight);
+  const pointLight = new THREE.PointLight(0xffffff, 1);
+  pointLight.position.set(5, 5, 5);
+  scene.add(pointLight);
 
-  const dirLight = new THREE.DirectionalLight(0x88ccff, 1.2);
-  dirLight.position.set(3, 5, 5);
-  scene.add(dirLight);
-
-  const rimLight = new THREE.DirectionalLight(0xff44aa, 0.6);
-  rimLight.position.set(-4, -2, -3);
-  scene.add(rimLight);
-
-  // グリッド背景
-  gridHelper = new THREE.GridHelper(40, 40, 0x1a2030, 0x111820);
-  gridHelper.position.y = -2;
-  scene.add(gridHelper);
-
-  // テキストグループ
   textGroup = new THREE.Group();
   scene.add(textGroup);
 
-  clock = new THREE.Clock();
-
-  // リサイズ
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
-
-  // マウス/タッチでの簡易オービット
-  setupOrbit();
-  animate();
 }
 
-// ===== 簡易オービット =====
-function setupOrbit() {
-  let isDragging = false;
-  let prevX = 0, prevY = 0;
-  let rotX = 0.1, rotY = 0;
-
-  const onStart = e => {
-    isDragging = true;
-    const p = e.touches ? e.touches[0] : e;
-    prevX = p.clientX; prevY = p.clientY;
-  };
-  const onMove = e => {
-    if (!isDragging) return;
-    const p = e.touches ? e.touches[0] : e;
-    const dx = (p.clientX - prevX) * 0.008;
-    const dy = (p.clientY - prevY) * 0.008;
-    rotY += dx; rotX += dy;
-    rotX = Math.max(-1.2, Math.min(1.2, rotX));
-    if (textGroup && animMode === 'none') {
-      textGroup.rotation.y = rotY;
-      textGroup.rotation.x = rotX;
-    }
-    prevX = p.clientX; prevY = p.clientY;
-  };
-  const onEnd = () => { isDragging = false; };
-
-  renderer.domElement.addEventListener('mousedown', onStart);
-  renderer.domElement.addEventListener('mousemove', onMove);
-  renderer.domElement.addEventListener('mouseup', onEnd);
-  renderer.domElement.addEventListener('touchstart', onStart, { passive: true });
-  renderer.domElement.addEventListener('touchmove', onMove, { passive: true });
-  renderer.domElement.addEventListener('touchend', onEnd);
-}
-
-// ===== アニメーションループ =====
-function animate() {
-  animId = requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
-
-  if (textGroup) {
-    switch(animMode) {
-      case 'rotate':
-        textGroup.rotation.y = t * 0.8;
-        break;
-      case 'float':
-        textGroup.position.y = Math.sin(t * 1.2) * 0.25;
-        break;
-      case 'pulse':
-        const s = 1 + Math.sin(t * 2.5) * 0.08;
-        textGroup.scale.setScalar(s * parseFloat(document.getElementById('scale').value));
-        break;
-    }
-
-    // ARモード中: ジャイロが有効なら3Dをカメラ方向に追従
-    if (arMode && gyroEnabled && animMode === 'none') {
-      const beta  = THREE.MathUtils.degToRad(deviceBeta  - 90); // 傾き(X)
-      const gamma = THREE.MathUtils.degToRad(deviceGamma);       // 左右(Y)
-      textGroup.rotation.x = beta  * 0.4;
-      textGroup.rotation.y = gamma * 0.6;
-    }
-  }
-  renderer.render(scene, camera);
-}
-
-// ===== opentype コマンド列 → 符号付き面積（Shoelace公式） =====
-function signedAreaFromCmds(cmds) {
-  // コマンドから頂点列を近似生成して面積計算
-  const pts = [];
-  for (const cmd of cmds) {
-    if (cmd.type === 'M' || cmd.type === 'L') pts.push({ x: cmd.x, y: cmd.y });
-    else if (cmd.type === 'C') pts.push({ x: cmd.x, y: cmd.y });
-    else if (cmd.type === 'Q') pts.push({ x: cmd.x, y: cmd.y });
-  }
-  let area = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const j = (i + 1) % pts.length;
-    area += pts[i].x * pts[j].y;
-    area -= pts[j].x * pts[i].y;
-  }
-  return area / 2;
-}
-
-// ===== 点がポリゴン内部にあるか（Ray casting） =====
-function isPointInCmds(px, py, cmds) {
-  const pts = [];
-  for (const cmd of cmds) {
-    if (cmd.type === 'M' || cmd.type === 'L' || cmd.type === 'C' || cmd.type === 'Q') {
-      pts.push({ x: cmd.x, y: cmd.y });
-    }
-  }
-  let inside = false;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    const xi = pts[i].x, yi = pts[i].y;
-    const xj = pts[j].x, yj = pts[j].y;
-    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-// ===== コマンド列をShapeまたはPathに書き込む =====
-function applyCommandsToPath(cmds, target) {
-  for (const cmd of cmds) {
-    if      (cmd.type === 'M') target.moveTo(cmd.x, -cmd.y);
-    else if (cmd.type === 'L') target.lineTo(cmd.x, -cmd.y);
-    else if (cmd.type === 'C') target.bezierCurveTo(cmd.x1,-cmd.y1, cmd.x2,-cmd.y2, cmd.x,-cmd.y);
-    else if (cmd.type === 'Q') target.quadraticCurveTo(cmd.x1,-cmd.y1, cmd.x,-cmd.y);
-    else if (cmd.type === 'Z') target.closePath();
-  }
-}
-
-// ===== opentype glyph → Three.Shape（正確な変換） =====
-function glyphsToShapes(font, text, fontSize) {
-  const path = font.getPath(text, 0, 0, fontSize);
-  const commands = path.commands;
-
-  // Step1: Mコマンドで輪郭ごとにコマンド列を分割
-  const contours = [];
-  let current = null;
-  for (const cmd of commands) {
-    if (cmd.type === 'M') { current = [cmd]; contours.push(current); }
-    else if (current) current.push(cmd);
-  }
-  if (contours.length === 0) return [];
-
-  // Step2: 各輪郭の符号付き面積を計算し分類
-  const items = contours.map(cmds => ({
-    cmds,
-    area: signedAreaFromCmds(cmds),
-    startX: cmds[0].x,
-    startY: cmds[0].y,
-  }));
-
-  // Step3: 面積絶対値の大きい順にソート（外側輪郭が先）
-  items.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
-
-  // Step4: 外側(正面積)をShape、内側(負面積)をholeとして割り当て
-  // ※フォントによって巻き方向が異なるので、絶対値最大=外側として扱う
-  const shapes = [];
-
-  // 最初の輪郭は必ず外側として扱い、以降はray castingで判定
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const absArea = Math.abs(item.area);
-
-    // 外側輪郭かどうか：まだどの外側Shapeにも含まれていないもの
-    let parentShape = null;
-    for (const s of shapes) {
-      if (isPointInCmds(item.startX, item.startY, s._cmds)) {
-        parentShape = s;
-        break;
-      }
-    }
-
-    if (parentShape === null) {
-      // 外側輪郭 → 新しいShape
-      const shape = new THREE.Shape();
-      applyCommandsToPath(item.cmds, shape);
-      shape._cmds = item.cmds; // 内外判定用に保持
-      shapes.push(shape);
-    } else {
-      // ホール → 親Shapeに追加
-      const hole = new THREE.Path();
-      applyCommandsToPath(item.cmds, hole);
-      parentShape.holes.push(hole);
-    }
-  }
-
-  // _cmdsプロパティを削除（Three.jsに渡す前にクリーン）
-  shapes.forEach(s => delete s._cmds);
-
-  return shapes;
-}
-
-// ===== メイン：テキスト3D生成 =====
-async function generate3DText() {
-  if (!opentypeFont) {
-    setStatus('フォントがまだ読み込まれていません…', 'err');
-    return;
-  }
-
-  // 少し待ってからUIをブロックしないように
-  await new Promise(r => setTimeout(r, 30));
-
-  try {
-    const text = document.getElementById('text-input').value || '日本語';
-    const scale = parseFloat(document.getElementById('scale').value);
-    const depth = parseFloat(document.getElementById('depth').value);
-    const bevel = parseFloat(document.getElementById('bevel').value);
-    const colorFront = document.getElementById('color-front').value;
-    const colorSide = document.getElementById('color-side').value;
-
-    // 既存テキストを削除
-    while (textGroup.children.length > 0) {
-      const child = textGroup.children[0];
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) {
-        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-        else child.material.dispose();
-      }
-      textGroup.remove(child);
-    }
-    textGroup.scale.setScalar(1);
-    textGroup.position.set(0, 0, 0);
-    textGroup.rotation.set(0, 0, 0);
-
-    // メタル専用補助ライトの制御
-    if (!scene._metalLights) {
-      const ml1 = new THREE.PointLight(0xffffff, 0, 8);
-      ml1.position.set(2, 3, 3);
-      const ml2 = new THREE.PointLight(0xaaddff, 0, 8);
-      ml2.position.set(-3, -1, 2);
-      const ml3 = new THREE.PointLight(0xffeecc, 0, 6);
-      ml3.position.set(0, -3, 1);
-      scene.add(ml1, ml2, ml3);
-      scene._metalLights = [ml1, ml2, ml3];
-    }
-    const metalIntensities = [2.5, 1.8, 1.2];
-    scene._metalLights.forEach((l, i) => {
-      l.intensity = matMode === 'metal' ? metalIntensities[i] : 0;
-    });
-
-    // フォントサイズ（Three.js単位）
-    const fontSize = 1.0;
-
-    // opentype.js でシェイプ生成
-    const shapes = glyphsToShapes(opentypeFont, text, fontSize);
-
-    if (!shapes || shapes.length === 0) {
-      throw new Error('文字シェイプを生成できませんでした');
-    }
-
-    // ExtrudeGeometry で押し出し
-    const extrudeSettings = {
-      depth: depth * fontSize,
-      bevelEnabled: bevel > 0,
-      bevelThickness: bevel * fontSize,
-      bevelSize: bevel * fontSize * 0.5,
-      bevelSegments: 4,
-      curveSegments: 8,
-    };
-
-    // マテリアル作成
-    const materials = createMaterials(colorFront, colorSide, matMode);
-
-    // 全シェイプを一度に押し出し
-    const geometry = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
-    geometry.computeBoundingBox();
-    const bbox = geometry.boundingBox;
-
-    // 中央揃え
-    const cx = (bbox.max.x + bbox.min.x) / 2;
-    const cy = (bbox.max.y + bbox.min.y) / 2;
-    const cz = (bbox.max.z + bbox.min.z) / 2;
-    geometry.translate(-cx, -cy, -cz);
-
-    const mesh = new THREE.Mesh(geometry, materials);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    textGroup.add(mesh);
-
-    // スケール適用
-    textGroup.scale.setScalar(scale * 1.5);
-
-    setStatus('✓ 3D生成完了！ドラッグで回転できます', 'ok');
-  } catch (e) {
-    console.error(e);
-    setStatus('⚠ 生成エラー: ' + e.message, 'err');
-  }
-}
-
-// ===== マテリアル生成 =====
-function createMaterials(colorFront, colorSide, mode) {
-  const fc = new THREE.Color(colorFront);
-  const sc = new THREE.Color(colorSide);
-
-  let frontMat, sideMat;
-
-  switch (mode) {
-    case 'neon':
-      frontMat = new THREE.MeshStandardMaterial({
-        color: fc, emissive: fc, emissiveIntensity: 0.8,
-        roughness: 0.2, metalness: 0.1,
-      });
-      sideMat = new THREE.MeshStandardMaterial({
-        color: sc, emissive: sc, emissiveIntensity: 0.5,
-        roughness: 0.3,
-      });
-      break;
-    case 'metal':
-      frontMat = new THREE.MeshPhysicalMaterial({
-        color: fc,
-        roughness: 0.15,
-        metalness: 1.0,
-        reflectivity: 1.0,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.1,
-        emissive: fc,
-        emissiveIntensity: 0.12,
-      });
-      sideMat = new THREE.MeshPhysicalMaterial({
-        color: sc,
-        roughness: 0.2,
-        metalness: 1.0,
-        reflectivity: 1.0,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.15,
-        emissive: sc,
-        emissiveIntensity: 0.08,
-      });
-      break;
-    case 'crystal':
-      frontMat = new THREE.MeshPhysicalMaterial({
-        color: fc, roughness: 0.0, metalness: 0.0,
-        transmission: 0.6, transparent: true, opacity: 0.7,
-        ior: 1.5,
-      });
-      sideMat = new THREE.MeshPhysicalMaterial({
-        color: sc, roughness: 0.0,
-        transmission: 0.4, transparent: true, opacity: 0.6,
-      });
-      break;
-    default: // standard
-      frontMat = new THREE.MeshStandardMaterial({
-        color: fc, roughness: 0.4, metalness: 0.3,
-      });
-      sideMat = new THREE.MeshStandardMaterial({
-        color: sc, roughness: 0.5, metalness: 0.2,
-      });
-  }
-
-  return [frontMat, sideMat];
-}
-
-
-
-// ===== AR モード =====
-async function startAR() {
-  const btn = document.getElementById('ar-btn');
+/**
+ * AR起動：カメラとジャイロ
+ */
+async function startARSystem() {
   const video = document.getElementById('ar-video');
+  const status = document.getElementById('status');
 
-  // iOS Safari: ジャイロ許可リクエスト
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const perm = await DeviceOrientationEvent.requestPermission();
-      gyroEnabled = perm === 'granted';
-    } catch(e) { gyroEnabled = false; }
-  } else {
-    gyroEnabled = true;
-  }
-
+  // 1. カメラ起動
   try {
-    // リアカメラ取得
     arStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
     });
     video.srcObject = arStream;
     video.style.display = 'block';
-
-    // Three.js をAR用に切替
-    scene.background = null;               // 透過
-    renderer.setClearColor(0x000000, 0);   // alpha=0
-    if (gridHelper) gridHelper.visible = false;
-
-    // ジャイロ登録
-    if (gyroEnabled) {
-      window.addEventListener('deviceorientation', onDeviceOrientation);
-    }
-
-    arMode = true;
-    btn.textContent = '⏹ AR終了';
-    btn.classList.add('active');
-    setStatus('📷 ARモード中 — デバイスを動かして位置を調整', 'ok');
-  } catch (e) {
-    setStatus(`⚠ カメラ起動失敗: ${e.message}`, 'err');
+    status.textContent = "Camera Active";
+  } catch (err) {
+    console.error("Camera Error:", err);
+    status.textContent = "Camera Error: " + err.message;
   }
+
+  // 2. ジャイロ（iOS対応）
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission === 'granted') {
+        window.addEventListener('deviceorientation', (e) => {
+          gyro.alpha = e.alpha; gyro.beta = e.beta; gyro.gamma = e.gamma;
+        });
+        isGyroEnabled = true;
+      }
+    } catch (e) { console.error("Gyro Permission Denied"); }
+  } else {
+    window.addEventListener('deviceorientation', (e) => {
+      gyro.alpha = e.alpha; gyro.beta = e.beta; gyro.gamma = e.gamma;
+    });
+    isGyroEnabled = true;
+  }
+
+  // 3. UIの非表示
+  document.getElementById('overlay').classList.add('hidden');
 }
 
-function stopAR() {
-  const btn = document.getElementById('ar-btn');
-  const video = document.getElementById('ar-video');
+/**
+ * 3Dテキスト生成
+ */
+async function updateText() {
+  if (!opentypeFont) return;
 
-  // カメラ停止
-  if (arStream) {
-    arStream.getTracks().forEach(t => t.stop());
-    arStream = null;
+  const text = document.getElementById('text-input').value || "AR";
+  const scaleValue = parseFloat(document.getElementById('scale').value);
+  const color = document.getElementById('color-front').value;
+
+  // 古いメッシュの削除
+  while(textGroup.children.length > 0) {
+    const obj = textGroup.children[0];
+    obj.geometry.dispose();
+    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+    else obj.material.dispose();
+    textGroup.remove(obj);
   }
-  video.srcObject = null;
-  video.style.display = 'none';
-
-  // Three.jsを通常表示に戻す
-  scene.background = new THREE.Color(0x0a0a0f);
-  renderer.setClearColor(0x0a0a0f, 1);
-  if (gridHelper) gridHelper.visible = true;
-
-  // ジャイロ解除
-  window.removeEventListener('deviceorientation', onDeviceOrientation);
-
-  arMode = false;
-  btn.textContent = '📷 ARモード';
-  btn.classList.remove('active');
-  setStatus('ARモードを終了しました');
-}
-
-function onDeviceOrientation(e) {
-  deviceAlpha = e.alpha || 0;
-  deviceBeta  = e.beta  || 0;
-  deviceGamma = e.gamma || 0;
-}
-
-// ===== ステータス更新 =====
-function setStatus(msg, type = '') {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = type;
-}
-
-// ===== フォント読み込み（キャッシュ対応） =====
-async function loadFont(fontKey) {
-  fontKey = fontKey || 'noto';
-
-  // opentype.js待機
-  let retry = 0;
-  while (typeof opentype === 'undefined' && retry < 50) {
-    await new Promise(r => setTimeout(r, 100));
-    retry++;
-  }
-  if (typeof opentype === 'undefined') {
-    setStatus('⚠ opentype.js 読み込み失敗', 'err');
-    return false;
-  }
-
-  // キャッシュあれば即返す
-  if (fontCache[fontKey]) {
-    opentypeFont = fontCache[fontKey];
-    setFontStatus(`✓ ${FONT_DEFS[fontKey].name}`);
-    return true;
-  }
-
-  const def = FONT_DEFS[fontKey];
-  if (!def) {
-    setStatus(`⚠ 未定義のフォント: ${fontKey}`, 'err');
-    return false;
-  }
-
-  setFontStatus(`読み込み中… ${def.name}`);
-  showFontProgress(20);
-  setStatus(`フォント読み込み中: ${def.name}`);
 
   try {
-    const res = await fetch(def.url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showFontProgress(70);
-    const buffer = await res.arrayBuffer();
-    const font = opentype.parse(buffer);
-    fontCache[fontKey] = font;
-    opentypeFont = font;
-    showFontProgress(100);
-    setFontStatus(`✓ ${def.name}`);
-    setStatus(`✓ ${def.name} 読み込み完了`, 'ok');
-    return true;
+    const fontSize = 1;
+    const path = opentypeFont.getPath(text, 0, 0, fontSize);
+    const shapes = transformPathToShapes(path);
+
+    const extrudeSettings = {
+      depth: 0.2,
+      bevelEnabled: true,
+      bevelThickness: 0.05,
+      bevelSize: 0.02,
+      bevelSegments: 3
+    };
+
+    const geometry = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+    geometry.computeBoundingBox();
+    const center = new THREE.Vector3();
+    geometry.boundingBox.getCenter(center);
+    geometry.translate(-center.x, -center.y, -center.z);
+
+    const material = createMaterial(color, matMode);
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    textGroup.add(mesh);
+    textGroup.scale.setScalar(scaleValue);
   } catch (e) {
-    console.error('フォント読み込みエラー:', e);
-    // CDN失敗時、notoならローカルも試みる
-    if (fontKey === 'noto') {
-      setFontStatus(`⚠ 読み込み失敗: ${e.message}`);
-      setStatus(`⚠ フォント読み込み失敗`, 'err');
-    } else {
-      setFontStatus(`⚠ ${def.name} 失敗 — Noto Sans JPに切替中…`);
-      return await loadFont('noto');
-    }
-    return false;
+    console.error("Text Generation Error:", e);
   }
 }
 
-function setFontStatus(msg) {
-  document.getElementById('font-status-label').textContent = msg;
-}
+/**
+ * opentype.js のパスを THREE.Shape に変換 (簡易版)
+ */
+function transformPathToShapes(opentypePath) {
+  const shapes = [];
+  let shape = null;
 
-function showFontProgress(pct) {
-  const bar = document.getElementById('font-loading-bar');
-  const prog = document.getElementById('font-loading-progress');
-  bar.style.display = 'block';
-  prog.style.width = pct + '%';
-  if (pct >= 100) setTimeout(() => { bar.style.display = 'none'; }, 600);
-}
-
-// ===== debounce付き自動更新 =====
-function scheduleUpdate(delay = 600) {
-  if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
-  setStatus('入力中…');
-  autoUpdateTimer = setTimeout(() => generate3DText(), delay);
-}
-
-// ===== UI イベント =====
-function setupUI() {
-  // スライダー
-  const sliders = [
-    { id: 'scale', valId: 'scale-val', suffix: 'x', decimals: 2 },
-    { id: 'depth', valId: 'depth-val', suffix: '', decimals: 2 },
-    { id: 'bevel', valId: 'bevel-val', suffix: '', decimals: 3 },
-  ];
-  sliders.forEach(({ id, valId, suffix, decimals }) => {
-    const el = document.getElementById(id);
-    const valEl = document.getElementById(valId);
-    el.addEventListener('input', () => {
-      valEl.textContent = parseFloat(el.value).toFixed(decimals) + suffix;
-      scheduleUpdate(300);
-    });
-  });
-
-  // テキスト入力：自動更新（debounce 700ms）
-  document.getElementById('text-input').addEventListener('input', () => {
-    scheduleUpdate(700);
-  });
-  // Enterキーで即時更新（Shift+Enterで改行）
-  document.getElementById('text-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
-      generate3DText();
+  opentypePath.commands.forEach(cmd => {
+    switch(cmd.type) {
+      case 'M':
+        shape = new THREE.Shape();
+        shape.moveTo(cmd.x, -cmd.y);
+        shapes.push(shape);
+        break;
+      case 'L':
+        shape.lineTo(cmd.x, -cmd.y);
+        break;
+      case 'Q':
+        shape.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
+        break;
+      case 'C':
+        shape.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
+        break;
+      case 'Z':
+        if(shape) shape.closePath();
+        break;
     }
   });
+  return shapes;
+}
 
-  // フォント切替
-  document.getElementById('font-select').addEventListener('change', async e => {
-    const key = e.target.value;
-    if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
-    const ok = await loadFont(key);
-    if (ok) generate3DText();
+/**
+ * マテリアル作成
+ */
+function createMaterial(colorHex, mode) {
+  const col = new THREE.Color(colorHex);
+  switch(mode) {
+    case 'neon':
+      return new THREE.MeshStandardMaterial({ 
+        color: col, emissive: col, emissiveIntensity: 1, roughness: 0.1, metalness: 0.5 
+      });
+    case 'metal':
+      return new THREE.MeshStandardMaterial({ 
+        color: col, roughness: 0.1, metalness: 1.0 
+      });
+    case 'crystal':
+      return new THREE.MeshPhysicalMaterial({ 
+        color: col, transmission: 0.9, thickness: 0.5, roughness: 0.05, ior: 1.5, transparent: true, opacity: 0.6
+      });
+    default:
+      return new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.2 });
+  }
+}
+
+/**
+ * アニメーションループ
+ */
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getElapsedTime();
+
+  if (textGroup) {
+    // 基本アニメーション
+    switch(animMode) {
+      case 'rotate': textGroup.rotation.y = delta * 0.5; break;
+      case 'float': textGroup.position.y = Math.sin(delta * 1.5) * 0.1; break;
+      case 'pulse': 
+        const s = parseFloat(document.getElementById('scale').value);
+        textGroup.scale.setScalar(s * (1 + Math.sin(delta * 3) * 0.1)); 
+        break;
+    }
+
+    // ジャイロ追従 (AR感を出すため)
+    if (isGyroEnabled) {
+      // 簡易的な傾き反映
+      textGroup.rotation.x = THREE.MathUtils.lerp(textGroup.rotation.x, THREE.MathUtils.degToRad(gyro.beta - 90) * 0.2, 0.1);
+      textGroup.rotation.z = THREE.MathUtils.lerp(textGroup.rotation.z, THREE.MathUtils.degToRad(gyro.gamma) * -0.2, 0.1);
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+/**
+ * フォントの読み込み
+ */
+async function loadFont(key) {
+  const url = FONT_DEFS[key];
+  if (fontCache[key]) {
+    opentypeFont = fontCache[key];
+    return;
+  }
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  opentypeFont = opentype.parse(buffer);
+  fontCache[key] = opentypeFont;
+}
+
+/**
+ * UIのセットアップ
+ */
+function setupUI() {
+  const panel = document.getElementById('panel');
+  const toggle = document.getElementById('toggle-panel');
+
+  toggle.addEventListener('click', () => panel.classList.toggle('open'));
+
+  document.getElementById('text-input').addEventListener('input', () => updateText());
+  document.getElementById('scale').addEventListener('input', () => updateText());
+  document.getElementById('color-front').addEventListener('input', () => updateText());
+
+  document.getElementById('font-select').addEventListener('change', async (e) => {
+    document.getElementById('status').textContent = "Loading Font...";
+    await loadFont(e.target.value);
+    updateText();
+    document.getElementById('status').textContent = "Ready";
   });
 
-  // マテリアルプリセット
   document.querySelectorAll('[data-mat]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-mat]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       matMode = btn.dataset.mat;
-      scheduleUpdate(200);
+      updateText();
     });
   });
 
-  // アニメプリセット
   document.querySelectorAll('[data-anim]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-anim]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       animMode = btn.dataset.anim;
-      if (animMode === 'none' && textGroup) {
-        textGroup.position.y = 0;
-        textGroup.scale.setScalar(parseFloat(document.getElementById('scale').value) * 1.5);
-      }
+      // 位置と回転のリセット
+      textGroup.position.set(0, 0, 0);
+      textGroup.rotation.set(0, 0, 0);
     });
   });
 
-  // カラー変更も自動更新
-  document.getElementById('color-front').addEventListener('input', () => scheduleUpdate(300));
-  document.getElementById('color-side').addEventListener('input', () => scheduleUpdate(300));
-
-  // ARボタン
-  document.getElementById('ar-btn').addEventListener('click', () => {
-    arMode ? stopAR() : startAR();
-  });
-
-  // リセット
-  document.getElementById('reset-btn').addEventListener('click', () => {
-    while (textGroup.children.length > 0) {
-      textGroup.remove(textGroup.children[0]);
-    }
-    textGroup.rotation.set(0, 0, 0);
-    textGroup.position.set(0, 0, 0);
-    document.getElementById('text-input').value = 'こんにちは';
-    document.getElementById('font-select').value = 'zenold';
-    document.getElementById('scale').value = '0.2';
-    document.getElementById('scale-val').textContent = '0.20x';
-    setStatus('リセットしました');
-    scheduleUpdate(300);
-  });
-
-  // パネル開閉（モバイル）
-  document.getElementById('toggle-panel').addEventListener('click', () => {
-    document.getElementById('panel').classList.toggle('open');
+  // スタートボタンの処理（ここがAR自動起動のトリガー）
+  document.getElementById('start-btn').addEventListener('click', () => {
+    startARSystem();
   });
 }
 
-// ===== 起動 =====
+/**
+ * メインエントリー
+ */
 async function main() {
-  initThree();
+  initEngine();
   setupUI();
+  animate();
 
-  setStatus('フォント読み込み中…');
-  const initKey = document.getElementById('font-select').value;
-  const ok = await loadFont(initKey);
-
-  // ローディング非表示
-  const loading = document.getElementById('loading');
-  loading.classList.add('hidden');
-  setTimeout(() => loading.style.display = 'none', 700);
-
-  if (ok && opentypeFont) {
-    await generate3DText();
+  // 初回フォント読み込み
+  try {
+    await loadFont('zenold');
+    await updateText();
+    
+    // 準備完了：スタートボタンを表示
+    document.getElementById('loader-content').style.display = 'none';
+    document.getElementById('start-btn').style.display = 'block';
+    document.getElementById('start-hint').style.display = 'block';
+  } catch (e) {
+    document.getElementById('status').textContent = "Init Error: " + e.message;
   }
 }
 
